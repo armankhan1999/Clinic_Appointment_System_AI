@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -16,6 +17,7 @@ from clinic.domain.slots import PartOfDay, format_date_long, format_time_12h
 from clinic.services.alerts import AlertService
 from clinic.services.availability import AvailabilityService, DayAvailability
 from clinic.services.booking import BookingService
+from clinic.services.clinic_settings import ClinicSettingsView
 from clinic.services.doctors import DoctorService
 
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -171,7 +173,7 @@ class CheckAvailabilityArgs(BaseModel):
     )
 
 
-def _day(day: Any) -> dict[str, str]:
+def _day(day: dt.date) -> dict[str, str]:
     return {"date": format_date_long(day), "date_iso": day.isoformat()}
 
 
@@ -295,5 +297,180 @@ BOOK_APPOINTMENT = ToolSpec(
 )
 
 
+class NoArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+REFERENCE_FIELD = Field(
+    pattern=r"^\s*[Aa][Pp][Tt]-\d{6,}\s*$",
+    max_length=20,
+    description="The appointment reference, for example APT-000123, as shown by list_my_appointments.",
+)
+
+
+def _cutoff_text(minutes: int) -> str:
+    return f"{minutes // 60} hours" if minutes % 60 == 0 else f"{minutes} minutes"
+
+
+def _refusal(code: ResultCode, view: ClinicSettingsView, reference: str) -> ToolResult:
+    if code is ResultCode.NOT_FOUND:
+        return ToolResult(code, {"problem": "This patient has no appointment with that reference."})
+    if code is ResultCode.ALREADY_CANCELLED:
+        return ToolResult(
+            code, {"reference": reference, "problem": "It is already cancelled; nothing changes."}
+        )
+    return ToolResult(
+        ResultCode.WITHIN_CUTOFF,
+        {
+            "reference": reference,
+            "problem": (
+                f"Appointments starting within {_cutoff_text(view.cutoff_minutes)}, or already started, "
+                "cannot be changed here."
+            ),
+            "clinic_phone": view.phone,
+            "next_step": "Offer the clinic phone number or to connect the patient with clinic staff.",
+        },
+    )
+
+
+async def list_my_appointments(ctx: ToolContext, args: NoArgs) -> ToolResult:
+    """TOOL-04 / E3-S1: the session patient's upcoming appointments only (E3-S1-AC3)."""
+    services = ctx.require_services()
+    view = await services.availability.settings()
+    upcoming = await services.booking.upcoming_for_patient(ctx.patient_id)
+    if not upcoming:
+        return ToolResult(ResultCode.NONE, {"appointments": []})
+    return ToolResult(
+        ResultCode.OK,
+        {
+            "appointments": [
+                {
+                    "reference": item.reference,
+                    "doctor": item.doctor_name,
+                    "date": format_date_long(item.start.astimezone(view.tz).date()),
+                    "time": format_time_12h(item.start.astimezone(view.tz)),
+                }
+                for item in upcoming
+            ]
+        },
+    )
+
+
+class CancelAppointmentArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    appointment_ref: str = REFERENCE_FIELD
+
+
+async def cancel_appointment(ctx: ToolContext, args: CancelAppointmentArgs) -> ToolResult:
+    """TOOL-06 / E3-S3-AC1: checks ownership, status and cut-off, then stages Confirm cancel / Keep it."""
+    services = ctx.require_services()
+    view = await services.availability.settings()
+    check = await services.booking.check_change(ctx.patient_id, args.appointment_ref)
+    if check.code is not ResultCode.OK or check.appointment is None:
+        return _refusal(check.code, view, args.appointment_ref.strip().upper())
+    appointment = check.appointment
+    local = appointment.start.astimezone(view.tz)
+    summary = {
+        "reference": appointment.reference,
+        "doctor": appointment.doctor_name,
+        "date": format_date_long(local.date()),
+        "time": format_time_12h(local),
+    }
+    ctx.require_stage()("cancel", {"appointment_id": str(appointment.id), **summary})
+    return ToolResult(
+        ResultCode.PENDING_CONFIRMATION,
+        {
+            **summary,
+            "next_step": "Nothing is cancelled yet. The patient now sees Confirm cancel and Keep it.",
+        },
+    )
+
+
+class RescheduleAppointmentArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    appointment_ref: str = REFERENCE_FIELD
+    new_slot_start: AwareDatetime = Field(
+        description="A slot_start returned by check_availability for the same doctor in this conversation."
+    )
+
+
+async def reschedule_appointment(ctx: ToolContext, args: RescheduleAppointmentArgs) -> ToolResult:
+    """TOOL-05 / E3-S2-AC1: same doctor, cut-off and new-slot checks, then stages a Confirm."""
+    services = ctx.require_services()
+    view = await services.availability.settings()
+    check = await services.booking.check_change(ctx.patient_id, args.appointment_ref)
+    if check.code is not ResultCode.OK or check.appointment is None:
+        return _refusal(check.code, view, args.appointment_ref.strip().upper())
+    appointment = check.appointment
+    slot_check = await services.booking.precheck(
+        ctx.patient_id, appointment.doctor_id, args.new_slot_start, exclude_appointment_id=appointment.id
+    )
+    if slot_check.code is ResultCode.LIMIT_REACHED and slot_check.reason is not None:
+        return ToolResult(ResultCode.LIMIT_REACHED, {"reason": LIMIT_REASONS[slot_check.reason]})
+    if slot_check.code is not ResultCode.OK or slot_check.slot is None:
+        return ToolResult(
+            ResultCode.SLOT_UNAVAILABLE,
+            {"problem": "That time is not free with this doctor. Call check_availability again."},
+        )
+    old_local = appointment.start.astimezone(view.tz)
+    new_local = slot_check.slot.start.astimezone(view.tz)
+    summary = {
+        "reference": appointment.reference,
+        "doctor": appointment.doctor_name,
+        "old_date": format_date_long(old_local.date()),
+        "old_time": format_time_12h(old_local),
+        "date": format_date_long(new_local.date()),
+        "time": format_time_12h(new_local),
+    }
+    ctx.require_stage()(
+        "reschedule",
+        {
+            "appointment_id": str(appointment.id),
+            "doctor_id": str(appointment.doctor_id),
+            "new_slot_start": slot_check.slot.start.isoformat(),
+            **summary,
+        },
+    )
+    return ToolResult(
+        ResultCode.PENDING_CONFIRMATION,
+        {
+            **summary,
+            "next_step": "Nothing has changed yet. The patient now sees the change with a Confirm button.",
+        },
+    )
+
+
+LIST_MY_APPOINTMENTS = ToolSpec(
+    name="list_my_appointments",
+    description="List the patient's own upcoming appointments with their references, soonest first.",
+    args_model=NoArgs,
+    executor=list_my_appointments,
+)
+CANCEL_APPOINTMENT = ToolSpec(
+    name="cancel_appointment",
+    description="Prepare cancelling one of the patient's appointments; it happens only after Confirm cancel.",
+    args_model=CancelAppointmentArgs,
+    executor=cancel_appointment,
+)
+RESCHEDULE_APPOINTMENT = ToolSpec(
+    name="reschedule_appointment",
+    description=(
+        "Prepare moving one of the patient's appointments to another free slot with the same doctor. "
+        "Use a slot_start from check_availability. It moves only after the patient taps Confirm."
+    ),
+    args_model=RescheduleAppointmentArgs,
+    executor=reschedule_appointment,
+)
+
+
 def build_registry() -> ToolRegistry:
-    return ToolRegistry([LIST_DOCTORS, CHECK_AVAILABILITY, BOOK_APPOINTMENT])
+    return ToolRegistry(
+        [
+            LIST_DOCTORS,
+            CHECK_AVAILABILITY,
+            BOOK_APPOINTMENT,
+            LIST_MY_APPOINTMENTS,
+            RESCHEDULE_APPOINTMENT,
+            CANCEL_APPOINTMENT,
+        ]
+    )

@@ -1,5 +1,6 @@
 """Appointment status state machine (DM-05, IMP-15, GAP-22)."""
 
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Literal
 
@@ -27,3 +28,8 @@ _ALLOWED: dict[tuple[AppointmentStatus, AppointmentStatus], frozenset[str]] = {
 
 def can_transition(current: AppointmentStatus, new: AppointmentStatus, *, actor: Actor) -> bool:
     return actor in _ALLOWED.get((current, new), frozenset())
+
+
+def within_cutoff(start: datetime, now: datetime, cutoff_minutes: int) -> bool:
+    """The bot may not change an appointment starting within the cut-off, or one that has started."""
+    return start - now < timedelta(minutes=cutoff_minutes)

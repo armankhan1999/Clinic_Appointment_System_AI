@@ -17,7 +17,8 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.db.models import Appointment, Patient
+from clinic.db.models import Appointment, Doctor, Patient
+from clinic.domain.appointments import within_cutoff
 from clinic.domain.results import ResultCode
 from clinic.domain.slots import DateWindow, Slot, booking_window
 from clinic.services.audit import ActorType, AuditService
@@ -50,6 +51,34 @@ class BookingOutcome:
     alternatives: tuple[Slot, ...] = ()
 
 
+@dataclass(frozen=True)
+class AppointmentView:
+    id: UUID
+    reference: str
+    doctor_id: UUID
+    doctor_name: str
+    start: datetime
+    end: datetime
+    status: str
+
+
+@dataclass(frozen=True)
+class ChangeCheck:
+    code: ResultCode  # OK, NOT_FOUND, ALREADY_CANCELLED, WITHIN_CUTOFF
+    appointment: AppointmentView | None = None
+
+
+@dataclass(frozen=True)
+class ChangeOutcome:
+    code: ResultCode
+    appointment: AppointmentView | None = None
+    reference: str | None = None
+    old_reference: str | None = None
+    slot: Slot | None = None
+    reason: LimitReason | None = None
+    alternatives: tuple[Slot, ...] = ()
+
+
 def nearest_free_slots(
     calendar: DoctorCalendar, around: datetime, tz: ZoneInfo, now: datetime, window: DateWindow, count: int
 ) -> tuple[Slot, ...]:
@@ -62,6 +91,12 @@ def nearest_free_slots(
         following += timedelta(days=1)
     chosen = sorted(candidates, key=lambda slot: (abs(slot.start - around), slot.start))[:count]
     return tuple(sorted(chosen, key=lambda slot: slot.start))
+
+
+def _appointment_view(row: Appointment, doctor_name: str) -> AppointmentView:
+    return AppointmentView(
+        row.id, row.ref, row.doctor_id, doctor_name, row.start_time, row.end_time, row.status
+    )
 
 
 def _constraint_name(exc: IntegrityError) -> str | None:
@@ -236,6 +271,162 @@ class BookingService:
             return BookingOutcome(ResultCode.SLOT_TAKEN)
         alternatives = nearest_free_slots(calendar, slot_start, view.tz, now, window, ALTERNATIVES)
         return BookingOutcome(ResultCode.SLOT_TAKEN, calendar.doctor_name, alternatives=alternatives)
+
+    # ---- managing existing appointments (E3) -----------------------------------------------------
+
+    async def upcoming_for_patient(self, patient_id: UUID) -> list[AppointmentView]:
+        """E3-S1-AC1: the session patient's upcoming booked appointments, soonest first."""
+        async with self._session_factory() as session:
+            rows = (
+                await session.execute(
+                    select(Appointment, Doctor.name)
+                    .join(Doctor, Doctor.id == Appointment.doctor_id)
+                    .where(
+                        Appointment.patient_id == patient_id,
+                        Appointment.status == "booked",
+                        Appointment.start_time > self._now(),
+                    )
+                    .order_by(Appointment.start_time)
+                )
+            ).all()
+        return [_appointment_view(row[0], row[1]) for row in rows]
+
+    async def check_change(self, patient_id: UUID, reference: str) -> ChangeCheck:
+        """E3-S1-AC3: lookups are always scoped to the session patient, so other references are NOT_FOUND."""
+        view = await self._settings.get()
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(
+                    select(Appointment, Doctor.name)
+                    .join(Doctor, Doctor.id == Appointment.doctor_id)
+                    .where(Appointment.patient_id == patient_id, Appointment.ref == reference.strip().upper())
+                )
+            ).first()
+        if row is None:
+            return ChangeCheck(ResultCode.NOT_FOUND)
+        appointment = _appointment_view(row[0], row[1])
+        return ChangeCheck(self._changeable(appointment, view), appointment)
+
+    def _changeable(self, appointment: AppointmentView, view: ClinicSettingsView) -> ResultCode:
+        if appointment.status == "cancelled":
+            return ResultCode.ALREADY_CANCELLED
+        if appointment.status != "booked" or within_cutoff(
+            appointment.start, self._now(), view.cutoff_minutes
+        ):
+            return ResultCode.WITHIN_CUTOFF  # E3-S2-AC4, E3-S3-AC4, E4-S3-AC3
+        return ResultCode.OK
+
+    async def _locked(
+        self, session: AsyncSession, patient_id: UUID, appointment_id: UUID
+    ) -> AppointmentView | None:
+        row = (
+            await session.execute(
+                select(Appointment, Doctor.name)
+                .join(Doctor, Doctor.id == Appointment.doctor_id)
+                .where(Appointment.id == appointment_id, Appointment.patient_id == patient_id)
+                .with_for_update(of=Appointment)
+            )
+        ).first()
+        return _appointment_view(row[0], row[1]) if row else None
+
+    async def cancel(self, *, patient_id: UUID, appointment_id: UUID) -> ChangeOutcome:
+        """E3-S3-AC2/AC3: cancel once; a repeat reports ALREADY_CANCELLED and changes nothing."""
+        view = await self._settings.get()
+        now = self._now()
+        async with self._session_factory() as session, session.begin():
+            appointment = await self._locked(session, patient_id, appointment_id)
+            if appointment is None:
+                return ChangeOutcome(ResultCode.NOT_FOUND)
+            code = self._changeable(appointment, view)
+            if code is ResultCode.OK:
+                row = await session.get_one(Appointment, appointment_id)
+                row.status = "cancelled"
+                row.cancelled_at = now
+                row.cancelled_by_kind = "patient"
+            self._audit_change(session, "appointment.cancel", appointment, code, patient_id)
+            return ChangeOutcome(code, appointment, reference=appointment.reference)
+
+    async def reschedule(
+        self, *, patient_id: UUID, appointment_id: UUID, new_slot_start: datetime
+    ) -> ChangeOutcome:
+        """E3-S2-AC2/AC3: in one transaction the old booking is cancelled and the new one created with
+        rescheduled_from; if the new slot is gone, everything rolls back and the old booking is unchanged."""
+        view = await self._settings.get()
+        now = self._now()
+        appointment: AppointmentView | None = None
+        try:
+            async with self._session_factory() as session, session.begin():
+                await session.scalar(select(Patient.id).where(Patient.id == patient_id).with_for_update())
+                appointment = await self._locked(session, patient_id, appointment_id)
+                if appointment is None:
+                    return ChangeOutcome(ResultCode.NOT_FOUND)
+                code = self._changeable(appointment, view)
+                if code is not ResultCode.OK:
+                    self._audit_change(session, "appointment.reschedule", appointment, code, patient_id)
+                    return ChangeOutcome(code, appointment)
+                check, _ = await self._check(
+                    session, view, now, patient_id, appointment.doctor_id, new_slot_start, appointment.id
+                )
+                if check.code is not ResultCode.SLOT_TAKEN:
+                    if check.code is not ResultCode.OK or check.slot is None:
+                        self._audit_change(
+                            session, "appointment.reschedule", appointment, check.code, patient_id
+                        )
+                        return ChangeOutcome(check.code, appointment, reason=check.reason)
+                    old = await session.get_one(Appointment, appointment_id)
+                    old.status = "cancelled"
+                    old.cancelled_at = now
+                    old.cancelled_by_kind = "patient"
+                    old.cancel_reason = "Rescheduled by the patient"
+                    await session.flush()
+                    new = Appointment(
+                        patient_id=patient_id,
+                        doctor_id=appointment.doctor_id,
+                        start_time=check.slot.start,
+                        end_time=check.slot.end,
+                        status="booked",
+                        source=old.source,
+                        rescheduled_from=old.id,
+                    )
+                    session.add(new)
+                    await session.flush()  # the double-booking constraints fire here
+                    self._audit_change(
+                        session, "appointment.reschedule", appointment, ResultCode.OK, patient_id
+                    )
+                    return ChangeOutcome(
+                        ResultCode.OK, appointment, reference=new.ref, old_reference=old.ref, slot=check.slot
+                    )
+        except IntegrityError as exc:
+            if _constraint_name(exc) not in DOUBLE_BOOKING_CONSTRAINTS:
+                raise
+        if appointment is None:  # unreachable: the constraints fire only after the appointment was loaded
+            raise RuntimeError("double-booking violation without a loaded appointment")
+        taken = await self._slot_taken(
+            view,
+            now,
+            patient_id,
+            appointment.doctor_id,
+            new_slot_start,
+            "patient_button",
+            None,
+            {"appointment_id": str(appointment_id), "slot_start": new_slot_start.astimezone(UTC).isoformat()},
+        )
+        return ChangeOutcome(ResultCode.SLOT_TAKEN, appointment, alternatives=taken.alternatives)
+
+    @staticmethod
+    def _audit_change(
+        session: AsyncSession, action: str, appointment: AppointmentView, result: ResultCode, patient_id: UUID
+    ) -> None:
+        AuditService.record(
+            session,
+            actor_type="patient_button",
+            actor_id=None,
+            action=action,
+            args={"appointment_id": str(appointment.id)},
+            result=result,
+            patient_id=patient_id,
+            latency_ms=None,
+        )
 
     @staticmethod
     def _audit(
