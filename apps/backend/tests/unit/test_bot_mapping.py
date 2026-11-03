@@ -5,7 +5,7 @@ from telegram import InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRem
 from telegram.constants import ChatType
 
 from clinic.bot.telegram_app import serves_chat, to_markup
-from clinic.conversation.replies import Button, Reply
+from clinic.domain.messages import Button, Reply
 
 
 def test_contact_button_becomes_a_one_time_reply_keyboard() -> None:

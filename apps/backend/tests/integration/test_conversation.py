@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from clinic.agent.loop import AgentLoop, AuditEntry
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.tools import build_registry
-from clinic.conversation.replies import IncomingUser, Reply
 from clinic.conversation.service import ConversationService
 from clinic.db.models import HandoffTicket, Patient
+from clinic.domain.messages import IncomingUser, Reply
 from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.patients import PatientService
 

@@ -11,7 +11,7 @@ from uuid import UUID
 
 from clinic.agent.pending import PendingAction, PendingStore
 from clinic.agent.tools import AgentServices
-from clinic.conversation.replies import Button, IncomingUser, Reply, callback
+from clinic.domain.messages import Button, IncomingUser, Reply, callback
 from clinic.domain.results import ResultCode
 from clinic.domain.slots import Slot, format_date_long, format_time_12h
 from clinic.services.clinic_settings import ClinicSettingsView

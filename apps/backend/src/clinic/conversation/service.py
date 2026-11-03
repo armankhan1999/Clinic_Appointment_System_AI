@@ -19,7 +19,7 @@ from clinic.agent.prompt import build_system_prompt
 from clinic.agent.tools import AgentServices, ToolContext
 from clinic.conversation import registration as reg
 from clinic.conversation.appointment_actions import CHANGE, CONFIRM, PICK, AppointmentActions, summary
-from clinic.conversation.replies import Button, IncomingUser, Reply, callback
+from clinic.domain.messages import Button, IncomingUser, Reply, callback
 from clinic.domain.patients import InvalidNameError, InvalidPhoneError, normalise_name, normalise_phone
 from clinic.observability import bind_request_id, new_request_id, request_id_var, safe_exception_fields
 from clinic.services.clinic_settings import ClinicSettingsService, ClinicSettingsView

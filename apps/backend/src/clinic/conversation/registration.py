@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from clinic.conversation.replies import Button, Reply, callback
+from clinic.domain.messages import Button, Reply, callback
 from clinic.domain.patients import NAME_MAX, NAME_MIN
 from clinic.services.clinic_settings import ClinicSettingsView
 

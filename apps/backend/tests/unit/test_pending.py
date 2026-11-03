@@ -3,7 +3,7 @@
 from datetime import UTC, datetime, timedelta
 
 from clinic.agent.pending import PendingStore
-from clinic.conversation.replies import MAX_CALLBACK_BYTES
+from clinic.domain.messages import MAX_CALLBACK_BYTES
 
 
 class WallClock:

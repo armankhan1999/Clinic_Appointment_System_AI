@@ -1,4 +1,4 @@
-"""Transport-agnostic reply model. The Telegram adapter and the evaluation suite both consume it."""
+"""Transport-agnostic outgoing message model, shared by the bot adapter, conversation and workers."""
 
 from dataclasses import dataclass
 

@@ -27,8 +27,8 @@ from telegram.ext import (
     filters,
 )
 
-from clinic.conversation.replies import IncomingUser, Reply
 from clinic.conversation.service import ConversationService
+from clinic.domain.messages import IncomingUser, Reply
 from clinic.observability import safe_exception_fields
 
 log = structlog.get_logger(__name__)
