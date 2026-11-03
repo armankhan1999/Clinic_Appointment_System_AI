@@ -7,6 +7,7 @@ Every entry point is guarded: whatever fails, the patient gets a reply with the 
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from typing import Any
+from uuid import UUID
 
 import structlog
 
@@ -16,19 +17,36 @@ from clinic.agent.loop import AgentLoop, AgentOutcome
 from clinic.agent.memory import ConversationMemory, SessionTracker
 from clinic.agent.pending import PendingAction, PendingKind, PendingStore
 from clinic.agent.prompt import build_system_prompt
+from clinic.agent.rate_limit import RateLimiter
 from clinic.agent.tools import AgentServices, ToolContext
 from clinic.conversation import registration as reg
 from clinic.conversation.appointment_actions import CHANGE, CONFIRM, PICK, AppointmentActions, summary
 from clinic.domain.messages import Button, IncomingUser, Reply, callback
 from clinic.domain.patients import InvalidNameError, InvalidPhoneError, normalise_name, normalise_phone
+from clinic.domain.results import ResultCode
+from clinic.domain.slots import format_date_long, format_time_12h
 from clinic.observability import bind_request_id, new_request_id, request_id_var, safe_exception_fields
 from clinic.services.clinic_settings import ClinicSettingsService, ClinicSettingsView
 from clinic.services.patients import PatientService, PatientView, PhoneCheck, RegistrationOutcome
+from clinic.services.reminders import REMINDER_CANCEL, REMINDER_CONFIRM, REMINDER_RESCHEDULE
 
 log = structlog.get_logger(__name__)
 
 EXPIRED = "This request has expired, please ask again."
 DELETE, KEEP = "delete", "keep"
+HANDOFF = "handoff"
+MAX_MESSAGE_CHARS = 1000  # E7-S3-AC2
+# GAP-32: three consecutive results like these from one tool count as the agent failing the same task.
+FAILURE_CODES = frozenset(
+    {
+        ResultCode.INVALID_ARGS,
+        ResultCode.ERROR,
+        ResultCode.NOT_FOUND,
+        ResultCode.SLOT_UNAVAILABLE,
+        ResultCode.INVALID_DATE,
+    }
+)
+FAILURES_BEFORE_HANDOFF = 3
 
 
 def _utc_now() -> datetime:
@@ -54,6 +72,7 @@ class ConversationService:
         clock: Callable[[], datetime] = _utc_now,
         sessions: SessionTracker | None = None,
         pending: PendingStore | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         self._patients = patients
         self._settings = settings
@@ -65,6 +84,8 @@ class ConversationService:
         self._pending = pending or PendingStore(clock)
         self._registrations = reg.RegistrationStore(clock)
         self._last_view: ClinicSettingsView | None = None
+        self._limiter = rate_limiter or RateLimiter()
+        self._tool_failures: dict[int, dict[str, int]] = {}
         self._actions = AppointmentActions(
             services=services, patients=patients, pending=self._pending, note=self._note, view=self._view
         )
@@ -104,10 +125,23 @@ class ConversationService:
     async def _text(self, user: IncomingUser, text: str) -> list[Reply]:
         view = await self._view()
         stripped = text.strip()
-        patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        verdict = self._limiter.check(user.telegram_user_id)
         # E5-S3: first check on every message, registered or not, mid-flow included; no LLM call.
         if is_emergency(stripped, view.emergency_phrases):
+            patient = await self._patients.get_by_telegram(user.telegram_user_id)
             return [await self._emergency(user, patient, view)]
+        if verdict == "drop":
+            return []
+        if verdict == "warn":
+            log.info("rate_limited")
+            return [
+                Reply("You're sending messages very quickly. Please slow down and try again in a minute.")
+            ]
+        if len(stripped) > MAX_MESSAGE_CHARS:
+            return [
+                Reply(f"Your message is too long. Please keep it under {MAX_MESSAGE_CHARS:,} characters.")
+            ]
+        patient = await self._patients.get_by_telegram(user.telegram_user_id)
         command = stripped.split()[0].lower() if stripped.startswith("/") else None
         if command == "/deletemydata":
             return [self._delete_request(user, patient)]
@@ -123,12 +157,28 @@ class ConversationService:
         staged_before = self._pending.peek(user.telegram_user_id)
         outcome = await self._run_agent(patient, stripped, view)
         replies.append(self._outcome_reply(outcome, view))
+        if self._failed_repeatedly(user.telegram_user_id, outcome):
+            replies.append(
+                Reply(
+                    "I'm having trouble with this. Would you like a member of our staff to help?",
+                    inline_buttons=((Button("Talk to staff", callback(HANDOFF, "agent_failed")),),),
+                )
+            )
         staged = self._pending.peek(user.telegram_user_id)
         if outcome.stopped == "reply" and staged is not None and staged is not staged_before:
             staged_summary = summary(staged, patient)
             if staged_summary is not None:
                 replies.append(staged_summary)
         return replies
+
+    def _failed_repeatedly(self, user_id: int, outcome: AgentOutcome) -> bool:
+        counts = self._tool_failures.setdefault(user_id, {})
+        for name, result in outcome.tool_results:
+            counts[name] = counts.get(name, 0) + 1 if result.code in FAILURE_CODES else 0
+        if any(count >= FAILURES_BEFORE_HANDOFF for count in counts.values()):
+            counts.clear()
+            return True
+        return False
 
     @staticmethod
     def _help(view: ClinicSettingsView) -> Reply:
@@ -198,15 +248,19 @@ class ConversationService:
         view = await self._view()
         if data in (reg.CONSENT_YES, reg.CONSENT_NO):
             return [await self._consent(user, data, view)]
-        kind, token = _parse_callback(data)
+        kind, value = _parse_callback(data)
         if kind in (DELETE, KEEP):
-            return [await self._delete_decision(user, kind, token)]
+            return [await self._delete_decision(user, kind, value)]
         if kind == CONFIRM:
-            return [await self._actions.decide(user, CONFIRM, token)]
+            return [await self._actions.decide(user, CONFIRM, value)]
         if kind == CHANGE:
-            return [await self._actions.decide(user, CHANGE, token)]
+            return [await self._actions.decide(user, CHANGE, value)]
         if kind == PICK:
-            return [await self._actions.pick(user, token)]
+            return [await self._actions.pick(user, value)]
+        if kind in (REMINDER_CONFIRM, REMINDER_RESCHEDULE, REMINDER_CANCEL):
+            return [await self._reminder_button(user, kind, value, view)]
+        if kind == HANDOFF and value == "agent_failed":
+            return [await self._handoff(user, view)]
         log.info("callback_expired_or_unknown")
         return [Reply(EXPIRED)]
 
@@ -236,6 +290,73 @@ class ConversationService:
             f"This sounds like an emergency. Please call {view.emergency_number} now or go to the nearest "
             "emergency department. This chat cannot help with emergencies. "
             "We have also flagged your message to the clinic staff."
+        )
+
+    # ---- reminder buttons (E4-S3) and staff handoff (E5-S4) ---------------------------------------
+
+    async def _reminder_button(
+        self, user: IncomingUser, kind: str, value: str, view: ClinicSettingsView
+    ) -> Reply:
+        patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        try:
+            appointment_id = UUID(value)
+        except ValueError:
+            return Reply(EXPIRED)
+        if patient is None:
+            return Reply(EXPIRED)
+        booking = self._services.booking
+        check = await booking.check_change_by_id(patient.id, appointment_id)
+        appointment = check.appointment
+        if appointment is None:
+            return Reply(EXPIRED)  # not this patient's appointment: forged or stale button
+        if appointment.status == "cancelled":
+            return Reply(f"{appointment.reference} is already cancelled.")
+        if booking.has_started(appointment) or appointment.status != "booked":
+            return Reply("This appointment has already started or passed, so it can no longer be changed.")
+        local = appointment.start.astimezone(view.tz)
+        when = f"{format_date_long(local.date())} at {format_time_12h(local)}"
+        if kind == REMINDER_CONFIRM:
+            await booking.confirm_presence(patient.id, appointment.id)
+            return Reply(f"Thank you! See you on {when} with {appointment.doctor_name}.")
+        if check.code is ResultCode.WITHIN_CUTOFF:
+            return Reply(
+                "It's now too close to the appointment to change it here. "
+                f"Please call the clinic on {view.phone}."
+            )
+        if kind == REMINDER_CANCEL:
+            staged = self._pending.put(
+                user.telegram_user_id,
+                "cancel",
+                {
+                    "appointment_id": str(appointment.id),
+                    "reference": appointment.reference,
+                    "doctor": appointment.doctor_name,
+                    "date": format_date_long(local.date()),
+                    "time": format_time_12h(local),
+                },
+            )
+            staged_summary = summary(staged, patient)
+            return staged_summary if staged_summary is not None else Reply(EXPIRED)
+        text = (
+            f"Sure. Which day would you like instead? I'll look up free times with {appointment.doctor_name}."
+        )
+        self._note(
+            user.telegram_user_id,
+            f"(The patient tapped Reschedule on the reminder for {appointment.reference} with "
+            f"{appointment.doctor_name} on {when}.)",
+            text,
+        )
+        return Reply(text)
+
+    async def _handoff(self, user: IncomingUser, view: ClinicSettingsView) -> Reply:
+        patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        if patient is None:
+            return Reply(EXPIRED)
+        code = await self._services.handoff.request(patient.id, "agent_failed")
+        already = " (you already have an open request)" if code is ResultCode.ALREADY_OPEN else ""
+        return Reply(
+            f"I've asked our staff to contact you{already}. "
+            f"You can also call {view.phone} ({view.staff_hours_text})."
         )
 
     # ---- data deletion (E1-S4) -----------------------------------------------------------------

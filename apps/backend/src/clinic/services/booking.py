@@ -307,6 +307,43 @@ class BookingService:
         appointment = _appointment_view(row[0], row[1])
         return ChangeCheck(self._changeable(appointment, view), appointment)
 
+    async def check_change_by_id(self, patient_id: UUID, appointment_id: UUID) -> ChangeCheck:
+        """Reminder buttons carry the appointment id; ownership is re-checked (buttons can be forged)."""
+        view = await self._settings.get()
+        async with self._session_factory() as session:
+            row = (
+                await session.execute(
+                    select(Appointment, Doctor.name)
+                    .join(Doctor, Doctor.id == Appointment.doctor_id)
+                    .where(Appointment.patient_id == patient_id, Appointment.id == appointment_id)
+                )
+            ).first()
+        if row is None:
+            return ChangeCheck(ResultCode.NOT_FOUND)
+        appointment = _appointment_view(row[0], row[1])
+        return ChangeCheck(self._changeable(appointment, view), appointment)
+
+    async def confirm_presence(self, patient_id: UUID, appointment_id: UUID) -> ResultCode:
+        """E4-S3-AC1: the patient confirms from the reminder; refused once the appointment has started."""
+        now = self._now()
+        async with self._session_factory() as session, session.begin():
+            appointment = await self._locked(session, patient_id, appointment_id)
+            if appointment is None:
+                return ResultCode.NOT_FOUND
+            if appointment.status == "cancelled":
+                code = ResultCode.ALREADY_CANCELLED
+            elif appointment.status != "booked" or appointment.start <= now:
+                code = ResultCode.WITHIN_CUTOFF
+            else:
+                row = await session.get_one(Appointment, appointment_id)
+                row.patient_confirmed_at = now
+                code = ResultCode.OK
+            self._audit_change(session, "appointment.patient_confirm", appointment, code, patient_id)
+            return code
+
+    def has_started(self, appointment: AppointmentView) -> bool:
+        return appointment.start <= self._now()
+
     def _changeable(self, appointment: AppointmentView, view: ClinicSettingsView) -> ResultCode:
         if appointment.status == "cancelled":
             return ResultCode.ALREADY_CANCELLED

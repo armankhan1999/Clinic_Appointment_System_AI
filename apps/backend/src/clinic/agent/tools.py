@@ -19,6 +19,8 @@ from clinic.services.availability import AvailabilityService, DayAvailability
 from clinic.services.booking import BookingService
 from clinic.services.clinic_settings import ClinicSettingsView
 from clinic.services.doctors import DoctorService
+from clinic.services.faq import FaqService
+from clinic.services.handoff import HandoffService
 
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 
@@ -29,6 +31,8 @@ class AgentServices:
     availability: AvailabilityService
     booking: BookingService
     alerts: AlertService
+    faq: FaqService
+    handoff: HandoffService
 
 
 type Stager = Callable[[PendingKind, Mapping[str, Any]], PendingAction]
@@ -463,6 +467,68 @@ RESCHEDULE_APPOINTMENT = ToolSpec(
 )
 
 
+class GetClinicInfoArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    topic: str = Field(
+        min_length=1,
+        max_length=40,
+        description="What the patient asked about, for example 'timings', 'fees', 'address', 'parking'.",
+    )
+
+
+async def get_clinic_info(ctx: ToolContext, args: GetClinicInfoArgs) -> ToolResult:
+    """TOOL-07 / E5-S1: approved answers only, as quoted data that is never an instruction (E7-S4-AC3)."""
+    faq = ctx.require_services().faq
+    entry = await faq.find(args.topic)
+    if entry is None:
+        return ToolResult(
+            ResultCode.NOT_FOUND,
+            {
+                "known_topics": await faq.topics(),
+                "next_step": "Say you do not have that information and offer staff help. Never guess.",
+            },
+        )
+    return ToolResult(ResultCode.OK, {"topic": entry.topic, "approved_answer": entry.answer})
+
+
+class HandoffArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: Literal["patient_requested", "agent_failed", "other"] = Field(
+        description="patient_requested when they ask for a person; agent_failed when you cannot help."
+    )
+
+
+async def handoff_to_staff(ctx: ToolContext, args: HandoffArgs) -> ToolResult:
+    """TOOL-08 / E5-S4: one open ticket per patient; shares the clinic phone and staff hours."""
+    services = ctx.require_services()
+    view = await services.availability.settings()
+    code = await services.handoff.request(ctx.patient_id, args.reason)
+    return ToolResult(
+        code,
+        {
+            "clinic_phone": view.phone,
+            "staff_hours": view.staff_hours_text,
+            "next_step": "Tell the patient that staff will contact them; share the phone and hours.",
+        },
+    )
+
+
+GET_CLINIC_INFO = ToolSpec(
+    name="get_clinic_info",
+    description=(
+        "Look up an approved answer about the clinic: timings, fees, address, parking, what to bring."
+    ),
+    args_model=GetClinicInfoArgs,
+    executor=get_clinic_info,
+)
+HANDOFF_TO_STAFF = ToolSpec(
+    name="handoff_to_staff",
+    description="Ask clinic staff to contact the patient, when they want a person or you cannot help them.",
+    args_model=HandoffArgs,
+    executor=handoff_to_staff,
+)
+
+
 def build_registry() -> ToolRegistry:
     return ToolRegistry(
         [
@@ -472,5 +538,7 @@ def build_registry() -> ToolRegistry:
             LIST_MY_APPOINTMENTS,
             RESCHEDULE_APPOINTMENT,
             CANCEL_APPOINTMENT,
+            GET_CLINIC_INFO,
+            HANDOFF_TO_STAFF,
         ]
     )

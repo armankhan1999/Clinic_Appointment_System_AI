@@ -119,6 +119,8 @@ def agent_services(session_factory: object, clock: object | None = None) -> Agen
     from clinic.services.booking import BookingService
     from clinic.services.clinic_settings import ClinicSettingsService
     from clinic.services.doctors import DoctorService
+    from clinic.services.faq import FaqService
+    from clinic.services.handoff import HandoffService
 
     factory: Any = session_factory
     settings = ClinicSettingsService(factory)
@@ -128,4 +130,6 @@ def agent_services(session_factory: object, clock: object | None = None) -> Agen
         availability=AvailabilityService(factory, settings, **extra),
         booking=BookingService(factory, settings, **extra),
         alerts=AlertService(factory),
+        faq=FaqService(factory),
+        handoff=HandoffService(factory),
     )

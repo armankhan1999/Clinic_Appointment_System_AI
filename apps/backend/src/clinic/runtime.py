@@ -16,6 +16,8 @@ from clinic.services.availability import AvailabilityService
 from clinic.services.booking import BookingService
 from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.doctors import DoctorService
+from clinic.services.faq import FaqService
+from clinic.services.handoff import HandoffService
 from clinic.services.patients import PatientService
 
 
@@ -45,6 +47,8 @@ def build_bot_runtime(settings: Settings) -> BotRuntime:
         availability=AvailabilityService(session_factory, clinic_settings),
         booking=BookingService(session_factory, clinic_settings),
         alerts=AlertService(session_factory),
+        faq=FaqService(session_factory),
+        handoff=HandoffService(session_factory),
     )
     conversation = ConversationService(
         patients=PatientService(session_factory),
