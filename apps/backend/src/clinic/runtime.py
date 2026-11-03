@@ -12,6 +12,7 @@ from clinic.config import DbTarget, Settings
 from clinic.conversation.service import ConversationService
 from clinic.db.session import make_engine, make_session_factory
 from clinic.services.availability import AvailabilityService
+from clinic.services.booking import BookingService
 from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.doctors import DoctorService
 from clinic.services.patients import PatientService
@@ -41,6 +42,7 @@ def build_bot_runtime(settings: Settings) -> BotRuntime:
     services = AgentServices(
         doctors=DoctorService(session_factory),
         availability=AvailabilityService(session_factory, clinic_settings),
+        booking=BookingService(session_factory, clinic_settings),
     )
     conversation = ConversationService(
         patients=PatientService(session_factory),

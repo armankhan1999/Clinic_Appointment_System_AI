@@ -51,6 +51,7 @@ class UserText:
 @dataclass(frozen=True)
 class ModelText:
     text: str
+    trusted: bool = False  # written by code (e.g. a booking result), not by the model
 
 
 @dataclass(frozen=True)
@@ -90,7 +91,7 @@ def to_gemini_contents(transcript: Sequence[TranscriptItem]) -> list[types.Conte
         match item:
             case UserText(text):
                 contents.append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
-            case ModelText(text):
+            case ModelText(text, _):
                 contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text)]))
             case ModelTurn(turn):
                 contents.append(_model_turn_content(turn))

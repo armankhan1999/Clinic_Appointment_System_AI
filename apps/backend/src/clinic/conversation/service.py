@@ -4,19 +4,24 @@ The Telegram adapter and the evaluation suite call these methods; they hold no t
 Every entry point is guarded: whatever fails, the patient gets a reply with the clinic phone number.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID
 
 import structlog
 
+from clinic.agent.llm import ModelText, UserText
 from clinic.agent.loop import AgentLoop, AgentOutcome
 from clinic.agent.memory import ConversationMemory, SessionTracker
-from clinic.agent.pending import PendingStore
+from clinic.agent.pending import PendingAction, PendingKind, PendingStore
 from clinic.agent.prompt import build_system_prompt
 from clinic.agent.tools import AgentServices, ToolContext
 from clinic.conversation import registration as reg
 from clinic.conversation.replies import Button, IncomingUser, Reply, callback
 from clinic.domain.patients import InvalidNameError, InvalidPhoneError, normalise_name, normalise_phone
+from clinic.domain.results import ResultCode
+from clinic.domain.slots import format_date_long, format_time_12h
 from clinic.observability import bind_request_id, new_request_id, request_id_var, safe_exception_fields
 from clinic.services.clinic_settings import ClinicSettingsService, ClinicSettingsView
 from clinic.services.patients import PatientService, PatientView, PhoneCheck, RegistrationOutcome
@@ -25,6 +30,7 @@ log = structlog.get_logger(__name__)
 
 EXPIRED = "This request has expired, please ask again."
 DELETE, KEEP = "delete", "keep"
+CONFIRM, CHANGE, PICK = "confirm", "change", "pick"
 
 
 def _utc_now() -> datetime:
@@ -110,8 +116,18 @@ class ConversationService:
             return [*replies, Reply("How can I help you today?")]
         if command is not None:
             return [*replies, self._help(view)]
+        staged_before = self._pending.peek(user.telegram_user_id)
         outcome = await self._run_agent(patient, stripped, view)
-        return [*replies, self._outcome_reply(outcome, view)]
+        replies.append(self._outcome_reply(outcome, view))
+        staged = self._pending.peek(user.telegram_user_id)
+        if (
+            outcome.stopped == "reply"
+            and staged is not None
+            and staged is not staged_before
+            and staged.kind == "book"
+        ):
+            replies.append(self._booking_summary(staged, patient))
+        return replies
 
     @staticmethod
     def _help(view: ClinicSettingsView) -> Reply:
@@ -184,6 +200,10 @@ class ConversationService:
         kind, token = _parse_callback(data)
         if kind in (DELETE, KEEP):
             return [await self._delete_decision(user, kind, token)]
+        if kind in (CONFIRM, CHANGE):
+            return [await self._booking_decision(user, kind, token)]
+        if kind == PICK:
+            return [await self._pick_alternative(user, token)]
         log.info("callback_expired_or_unknown")
         return [Reply(EXPIRED)]
 
@@ -239,6 +259,128 @@ class ConversationService:
             remove_keyboard=True,
         )
 
+    # ---- booking confirmation (E2-S3) ----------------------------------------------------------
+
+    @staticmethod
+    def _booking_summary(action: PendingAction, patient: PatientView) -> Reply:
+        """E2-S3-AC1: rendered by code, so the patient's name never passes through the LLM (D-16)."""
+        params = action.params
+        return Reply(
+            "Please confirm your appointment:\n"
+            f"Doctor: {params['doctor']}\nDate: {params['date']}\nTime: {params['time']}\n"
+            f"Patient: {patient.full_name}",
+            inline_buttons=(
+                (
+                    Button("Confirm", callback(CONFIRM, action.token)),
+                    Button("Change", callback(CHANGE, action.token)),
+                ),
+            ),
+        )
+
+    def _take(self, user_id: int, kind: PendingKind, token: str) -> PendingAction | None:
+        staged = self._pending.peek(user_id)
+        if staged is None or staged.kind != kind:
+            return None
+        return self._pending.pop(user_id, token)
+
+    def _note(self, user_id: int, event: str, reply_text: str) -> None:
+        """Code-authored outcome kept in memory, so the model knows what the buttons did."""
+        self._memory.append(user_id, [UserText(event), ModelText(reply_text, trusted=True)])
+
+    async def _booking_decision(self, user: IncomingUser, kind: str, token: str) -> Reply:
+        action = self._take(user.telegram_user_id, "book", token)
+        if action is None:
+            return Reply(EXPIRED)
+        if kind == CHANGE:
+            text = "No problem, nothing has been booked. Which day or time would you prefer?"
+            self._note(user.telegram_user_id, "(The patient tapped Change.)", text)
+            return Reply(text)
+        patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        if patient is None:
+            return Reply(EXPIRED)
+        params = action.params
+        outcome = await self._services.booking.book(
+            patient_id=patient.id,  # E2-S3-AC5: from the session, never from the model
+            doctor_id=UUID(params["doctor_id"]),
+            slot_start=datetime.fromisoformat(params["slot_start"]),
+            source="bot",
+        )
+        if outcome.code is ResultCode.OK:
+            text = (
+                f"Booked! Your reference is {outcome.reference}: {params['doctor']} on {params['date']} "
+                f"at {params['time']}."
+            )
+            self._note(user.telegram_user_id, "(The patient tapped Confirm.)", text)
+            return Reply(text)
+        if outcome.code is ResultCode.SLOT_TAKEN and outcome.alternatives:
+            view = await self._view()
+            requested_day = datetime.fromisoformat(params["slot_start"]).astimezone(view.tz).date()
+            choices = []
+            for slot in outcome.alternatives:
+                local = slot.start.astimezone(view.tz)
+                label = format_time_12h(local)
+                if local.date() != requested_day:
+                    label = f"{format_date_long(local.date())}, {label}"
+                choices.append((label, slot.start.isoformat()))
+            choose = self._pending.put(
+                user.telegram_user_id,
+                "choose_slot",
+                {
+                    "doctor_id": params["doctor_id"],
+                    "doctor": params["doctor"],
+                    "slots": [iso for _, iso in choices],
+                },
+            )
+            text = f"Sorry, that slot was just taken. The nearest free times with {params['doctor']} are:"
+            self._note(
+                user.telegram_user_id,
+                "(The patient tapped Confirm.)",
+                f"{text} {', '.join(label for label, _ in choices)}.",
+            )
+            return Reply(
+                text,
+                inline_buttons=tuple(
+                    (Button(label, callback(PICK, f"{choose.token}:{index}")),)
+                    for index, (label, _) in enumerate(choices)
+                ),
+            )
+        reasons = {
+            ResultCode.LIMIT_REACHED: "you have reached the booking limit",
+            ResultCode.SLOT_TAKEN: "that slot was just taken",
+        }
+        reason = reasons.get(outcome.code, "that time is no longer available")
+        text = f"Sorry, I couldn't book it because {reason}. Please ask me for other free times."
+        self._note(user.telegram_user_id, "(The patient tapped Confirm.)", text)
+        return Reply(text)
+
+    async def _pick_alternative(self, user: IncomingUser, value: str) -> Reply:
+        token, _, index_text = value.rpartition(":")
+        action = self._take(user.telegram_user_id, "choose_slot", token)
+        if action is None or not index_text.isdigit() or int(index_text) >= len(action.params["slots"]):
+            return Reply(EXPIRED)
+        patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        if patient is None:
+            return Reply(EXPIRED)
+        view = await self._view()
+        doctor_id = UUID(action.params["doctor_id"])
+        slot_start = datetime.fromisoformat(action.params["slots"][int(index_text)])
+        check = await self._services.booking.precheck(patient.id, doctor_id, slot_start)
+        if check.code is not ResultCode.OK or check.slot is None:
+            return Reply("Sorry, that time is no longer free. Please ask me for other free times.")
+        local = check.slot.start.astimezone(view.tz)
+        staged = self._pending.put(
+            user.telegram_user_id,
+            "book",
+            {
+                "doctor_id": str(doctor_id),
+                "slot_start": check.slot.start.isoformat(),
+                "doctor": check.doctor_name,
+                "date": format_date_long(local.date()),
+                "time": format_time_12h(local),
+            },
+        )
+        return self._booking_summary(staged, patient)
+
     def _forget(self, user_id: int) -> None:
         self._memory.clear(user_id)
         self._sessions.forget(user_id)
@@ -250,7 +392,12 @@ class ConversationService:
     async def _run_agent(self, patient: PatientView, text: str, view: ClinicSettingsView) -> AgentOutcome:
         today = self._clock().astimezone(view.tz).date()
         request_id = request_id_var.get() or new_request_id()
-        ctx = ToolContext(patient_id=patient.id, request_id=request_id, services=self._services)
+        user_id = patient.telegram_user_id or 0
+
+        def stage(kind: PendingKind, params: Mapping[str, Any]) -> PendingAction:
+            return self._pending.put(user_id, kind, params)
+
+        ctx = ToolContext(patient_id=patient.id, request_id=request_id, services=self._services, stage=stage)
         # D-16: the model sees the clinic configuration and the message text, never who the patient is.
         prompt = build_system_prompt(view, today)
         return await self._agent.run(ctx, self._memory, patient.telegram_user_id or 0, text, prompt)

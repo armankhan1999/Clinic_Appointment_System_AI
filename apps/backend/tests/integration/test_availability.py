@@ -1,20 +1,27 @@
 """Availability (E2-S2-AC1..AC3, E2-S4-AC3, E2-S5-AC3, GAP-33) and the check_availability tool."""
 
 import uuid
+from dataclasses import replace
 from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.agent.tools import AgentServices, CheckAvailabilityArgs, ToolContext, check_availability
+from clinic.agent.tools import CheckAvailabilityArgs, ToolContext, check_availability
 from clinic.db.models import Doctor, DoctorLeave
 from clinic.domain.results import ResultCode
 from clinic.domain.slots import PartOfDay
 from clinic.services.availability import AvailabilityService
 from clinic.services.clinic_settings import ClinicSettingsService
-from clinic.services.doctors import DoctorService
 
-from .factories import add_schedule, make_appointment, make_clinic_settings, make_doctor, make_patient
+from .factories import (
+    add_schedule,
+    agent_services,
+    make_appointment,
+    make_clinic_settings,
+    make_doctor,
+    make_patient,
+)
 
 Factory = async_sessionmaker[AsyncSession]
 IST = ZoneInfo("Asia/Kolkata")
@@ -99,7 +106,7 @@ async def test_unknown_or_inactive_doctor_is_not_found(session_factory: Factory)
 
 
 def _ctx(session_factory: Factory, service: AvailabilityService) -> ToolContext:
-    services = AgentServices(doctors=DoctorService(session_factory), availability=service)
+    services = replace(agent_services(session_factory, clock=lambda: NOW), availability=service)
     return ToolContext(uuid.uuid4(), "req-avail", services)
 
 

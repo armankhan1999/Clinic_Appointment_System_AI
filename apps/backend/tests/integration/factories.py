@@ -2,10 +2,14 @@
 
 from datetime import UTC, datetime, time, timedelta
 from itertools import count
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clinic.db.models import Appointment, Doctor, DoctorSchedule, Patient
+
+if TYPE_CHECKING:
+    from clinic.agent.tools import AgentServices
 
 _phone_suffix = count(100)
 
@@ -102,3 +106,21 @@ async def make_clinic_settings(session: AsyncSession) -> None:
         )
     )
     await session.flush()
+
+
+def agent_services(session_factory: object, clock: object | None = None) -> AgentServices:
+    """All tool services over one session factory; `clock` pins "now" for availability and booking."""
+    from clinic.agent.tools import AgentServices
+    from clinic.services.availability import AvailabilityService
+    from clinic.services.booking import BookingService
+    from clinic.services.clinic_settings import ClinicSettingsService
+    from clinic.services.doctors import DoctorService
+
+    factory: Any = session_factory
+    settings = ClinicSettingsService(factory)
+    extra: dict[str, Any] = {"clock": clock} if clock is not None else {}
+    return AgentServices(
+        doctors=DoctorService(factory),
+        availability=AvailabilityService(factory, settings, **extra),
+        booking=BookingService(factory, settings, **extra),
+    )

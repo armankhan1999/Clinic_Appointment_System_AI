@@ -8,17 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from clinic.agent.loop import AgentLoop, AuditEntry
 from clinic.agent.memory import ConversationMemory
-from clinic.agent.tools import AgentServices, build_registry
+from clinic.agent.tools import build_registry
 from clinic.conversation.replies import IncomingUser, Reply
 from clinic.conversation.service import ConversationService
 from clinic.db.models import Appointment, AuditLog, Patient
-from clinic.services.availability import AvailabilityService
 from clinic.services.clinic_settings import ClinicSettingsService
-from clinic.services.doctors import DoctorService
 from clinic.services.patients import PatientService
 
 from ..unit.agent_doubles import ScriptedLLM, call_turn, text_turn
-from .factories import make_appointment, make_clinic_settings, make_doctor, make_patient
+from .factories import agent_services, make_appointment, make_clinic_settings, make_doctor, make_patient
 
 Factory = async_sessionmaker[AsyncSession]
 USER = IncomingUser(telegram_user_id=4242)
@@ -46,9 +44,7 @@ async def build(
         settings=settings,
         agent=AgentLoop(llm, build_registry(), _no_audit, actor_id="test"),
         memory=ConversationMemory(),
-        services=AgentServices(
-            DoctorService(session_factory), AvailabilityService(session_factory, settings)
-        ),
+        services=agent_services(session_factory),
         clock=lambda: NOW,
     )
 

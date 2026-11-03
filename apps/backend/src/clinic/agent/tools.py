@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from clinic.agent.pending import PendingAction, PendingKind
 from clinic.domain.dates import Ambiguous, Resolved, resolve_date
 from clinic.domain.results import ResultCode
 from clinic.domain.slots import PartOfDay, format_date_long, format_time_12h
 from clinic.services.availability import AvailabilityService, DayAvailability
+from clinic.services.booking import BookingService
 from clinic.services.doctors import DoctorService
 
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -22,6 +24,10 @@ WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturd
 class AgentServices:
     doctors: DoctorService
     availability: AvailabilityService
+    booking: BookingService
+
+
+type Stager = Callable[[PendingKind, Mapping[str, Any]], PendingAction]
 
 
 @dataclass(frozen=True)
@@ -31,11 +37,17 @@ class ToolContext:
     patient_id: UUID
     request_id: str
     services: AgentServices | None = None
+    stage: Stager | None = None  # stages a write for the patient's Confirm tap (AGT-11)
 
     def require_services(self) -> AgentServices:
         if self.services is None:
             raise RuntimeError("tool context has no services")
         return self.services
+
+    def require_stage(self) -> Stager:
+        if self.stage is None:
+            raise RuntimeError("tool context cannot stage confirmations")
+        return self.stage
 
 
 @dataclass(frozen=True)
@@ -221,5 +233,65 @@ CHECK_AVAILABILITY = ToolSpec(
 )
 
 
+class BookAppointmentArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doctor_id: UUID = Field(description="The doctor_id returned by list_doctors.")
+    slot_start: AwareDatetime = Field(
+        description="Exactly one slot_start value returned by check_availability in this conversation."
+    )
+
+
+LIMIT_REASONS = {
+    "same_doctor_same_day": "The patient already has an appointment with this doctor on the same day.",
+    "max_upcoming": "The patient already has the maximum number of upcoming appointments.",
+}
+
+
+async def book_appointment(ctx: ToolContext, args: BookAppointmentArgs) -> ToolResult:
+    """TOOL-03 / E2-S3-AC1: checks the slot and limits, writes nothing, stages a Confirm for the patient."""
+    services = ctx.require_services()
+    view = await services.availability.settings()
+    check = await services.booking.precheck(ctx.patient_id, args.doctor_id, args.slot_start)
+    if check.code is ResultCode.NOT_FOUND:
+        return ToolResult(ResultCode.NOT_FOUND, {"problem": "No active doctor has that doctor_id."})
+    if check.code is ResultCode.LIMIT_REACHED and check.reason is not None:
+        return ToolResult(ResultCode.LIMIT_REACHED, {"reason": LIMIT_REASONS[check.reason]})
+    if check.code is not ResultCode.OK or check.slot is None:
+        return ToolResult(
+            ResultCode.SLOT_UNAVAILABLE,
+            {"problem": "That time is not free. Call check_availability and offer only its slots."},
+        )
+    local_start = check.slot.start.astimezone(view.tz)
+    summary = {
+        "doctor": check.doctor_name,
+        "date": format_date_long(local_start.date()),
+        "time": format_time_12h(local_start),
+    }
+    ctx.require_stage()(
+        "book", {"doctor_id": str(args.doctor_id), "slot_start": check.slot.start.isoformat(), **summary}
+    )
+    return ToolResult(
+        ResultCode.PENDING_CONFIRMATION,
+        {
+            **summary,
+            "next_step": (
+                "Nothing is booked yet. The patient now sees this summary with Confirm and Change buttons. "
+                "Ask them to tap Confirm. Do not say the appointment is booked."
+            ),
+        },
+    )
+
+
+BOOK_APPOINTMENT = ToolSpec(
+    name="book_appointment",
+    description=(
+        "Prepare a booking for the patient to confirm. Use only a slot_start returned by check_availability. "
+        "The booking is made only after the patient taps Confirm."
+    ),
+    args_model=BookAppointmentArgs,
+    executor=book_appointment,
+)
+
+
 def build_registry() -> ToolRegistry:
-    return ToolRegistry([LIST_DOCTORS, CHECK_AVAILABILITY])
+    return ToolRegistry([LIST_DOCTORS, CHECK_AVAILABILITY, BOOK_APPOINTMENT])

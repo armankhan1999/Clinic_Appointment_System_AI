@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-type PendingKind = Literal["book", "reschedule", "cancel", "delete_data"]
+type PendingKind = Literal["book", "choose_slot", "reschedule", "cancel", "delete_data"]
 
 DEFAULT_TTL = timedelta(minutes=10)
 
