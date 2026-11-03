@@ -30,3 +30,6 @@ reports/
 Thumbs.db
 .vscode/
 .idea/
+
+# Claude Code local state (agent worktrees)
+.claude/
