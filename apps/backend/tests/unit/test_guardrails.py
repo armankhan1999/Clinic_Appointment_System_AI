@@ -34,3 +34,10 @@ def test_ordinary_messages_do_not_match(message: str) -> None:
 
 def test_normalise_folds_case_punctuation_apostrophes_and_spaces() -> None:
     assert normalise("  Can\N{RIGHT SINGLE QUOTATION MARK}T   Breathe!! ") == "cant breathe"
+
+
+def test_phrases_in_other_scripts_match() -> None:
+    hindi = "सीने में दर्द"  # "chest pain" in Hindi
+    assert is_emergency(f"मुझे {hindi} है!", [hindi])
+    assert not is_emergency("नमस्ते", [hindi])
+    assert normalise(hindi) == hindi

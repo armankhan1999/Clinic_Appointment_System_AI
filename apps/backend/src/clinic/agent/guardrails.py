@@ -3,17 +3,24 @@
 A keyword list misses some phrasings; an LLM-based second check is future scope (E5-S3 note).
 """
 
-import re
+import unicodedata
 from collections.abc import Iterable
 
-_APOSTROPHES = re.compile("['\N{RIGHT SINGLE QUOTATION MARK}\N{LEFT SINGLE QUOTATION MARK}`]")
-_NON_WORD = re.compile(r"[^0-9a-z]+")
+_APOSTROPHES = frozenset("'`\N{RIGHT SINGLE QUOTATION MARK}\N{LEFT SINGLE QUOTATION MARK}")
+# Punctuation, symbols, separators and control characters split words. Letters and combining marks in
+# any script are kept, so phrases configured in Hindi or other languages still match.
+_SEPARATOR_CATEGORIES = ("P", "S", "Z", "C")
 
 
 def normalise(text: str) -> str:
-    """Lower case, apostrophes removed ("can't" == "cant"), other non-alphanumerics become one space."""
-    folded = _APOSTROPHES.sub("", text.casefold())
-    return _NON_WORD.sub(" ", folded).strip()
+    """Case-folded, apostrophes removed ("can't" == "cant"), other punctuation and spacing → one space."""
+    characters = []
+    for character in text.casefold():
+        if character in _APOSTROPHES:
+            continue
+        separator = unicodedata.category(character).startswith(_SEPARATOR_CATEGORIES)
+        characters.append(" " if separator else character)
+    return " ".join("".join(characters).split())
 
 
 def is_emergency(text: str, phrases: Iterable[str]) -> bool:
