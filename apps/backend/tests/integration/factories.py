@@ -7,11 +7,13 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from clinic.db.models import Appointment, Doctor, DoctorSchedule, Patient
+from seed import CLINIC
 
 if TYPE_CHECKING:
     from clinic.agent.tools import AgentServices
 
 _phone_suffix = count(100)
+EMERGENCY_PHRASES: tuple[str, ...] = tuple(CLINIC["emergency_phrases"])
 
 
 def fictional_phone() -> str:
@@ -102,7 +104,8 @@ async def make_clinic_settings(session: AsyncSession) -> None:
             staff_hours_text="Monday to Saturday, 9:00 AM to 6:00 PM",
             timezone="Asia/Kolkata",
             emergency_number="112",
-            emergency_phrases=["chest pain"],
+            # Same list as scripts/seed.py, so tests exercise the configured phrases.
+            emergency_phrases=list(EMERGENCY_PHRASES),
         )
     )
     await session.flush()
@@ -111,6 +114,7 @@ async def make_clinic_settings(session: AsyncSession) -> None:
 def agent_services(session_factory: object, clock: object | None = None) -> AgentServices:
     """All tool services over one session factory; `clock` pins "now" for availability and booking."""
     from clinic.agent.tools import AgentServices
+    from clinic.services.alerts import AlertService
     from clinic.services.availability import AvailabilityService
     from clinic.services.booking import BookingService
     from clinic.services.clinic_settings import ClinicSettingsService
@@ -123,4 +127,5 @@ def agent_services(session_factory: object, clock: object | None = None) -> Agen
         doctors=DoctorService(factory),
         availability=AvailabilityService(factory, settings, **extra),
         booking=BookingService(factory, settings, **extra),
+        alerts=AlertService(factory),
     )

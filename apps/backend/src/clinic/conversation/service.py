@@ -11,6 +11,7 @@ from uuid import UUID
 
 import structlog
 
+from clinic.agent.guardrails import is_emergency
 from clinic.agent.llm import ModelText, UserText
 from clinic.agent.loop import AgentLoop, AgentOutcome
 from clinic.agent.memory import ConversationMemory, SessionTracker
@@ -103,8 +104,11 @@ class ConversationService:
     async def _text(self, user: IncomingUser, text: str) -> list[Reply]:
         view = await self._view()
         stripped = text.strip()
-        command = stripped.split()[0].lower() if stripped.startswith("/") else None
         patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        # E5-S3: first check on every message, registered or not, mid-flow included; no LLM call.
+        if is_emergency(stripped, view.emergency_phrases):
+            return [await self._emergency(user, patient, view)]
+        command = stripped.split()[0].lower() if stripped.startswith("/") else None
         if command == "/deletemydata":
             return [self._delete_request(user, patient)]
         if patient is None:
@@ -219,6 +223,21 @@ class ConversationService:
         state.consented_at = self._clock()
         state.step = reg.Step.PHONE
         return reg.ask_for_phone()
+
+    async def _emergency(
+        self, user: IncomingUser, patient: PatientView | None, view: ClinicSettingsView
+    ) -> Reply:
+        created = await self._services.alerts.raise_emergency(
+            patient_id=patient.id if patient else None,
+            telegram_user_id=user.telegram_user_id,
+            now=self._clock(),
+        )
+        log.warning("emergency_redirected", new_alert=created)
+        return Reply(
+            f"This sounds like an emergency. Please call {view.emergency_number} now or go to the nearest "
+            "emergency department. This chat cannot help with emergencies. "
+            "We have also flagged your message to the clinic staff."
+        )
 
     # ---- data deletion (E1-S4) -----------------------------------------------------------------
 

@@ -13,6 +13,7 @@ from clinic.agent.pending import PendingAction, PendingKind
 from clinic.domain.dates import Ambiguous, Resolved, resolve_date
 from clinic.domain.results import ResultCode
 from clinic.domain.slots import PartOfDay, format_date_long, format_time_12h
+from clinic.services.alerts import AlertService
 from clinic.services.availability import AvailabilityService, DayAvailability
 from clinic.services.booking import BookingService
 from clinic.services.doctors import DoctorService
@@ -25,6 +26,7 @@ class AgentServices:
     doctors: DoctorService
     availability: AvailabilityService
     booking: BookingService
+    alerts: AlertService
 
 
 type Stager = Callable[[PendingKind, Mapping[str, Any]], PendingAction]
