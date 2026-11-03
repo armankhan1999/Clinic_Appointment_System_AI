@@ -1,0 +1,38 @@
+# User Story Tracker
+
+Baseline generated from the source document; maintained by hand from here. A story is COMPLETED only when every AC has passing evidence (see `test-execution-tracker.md`).
+
+| ID | Description | Priority | Pts | Sprint | Assigned role | Dependencies | Source requirement | Acceptance criteria | Implementation status | Test status | Evidence / files | Completion date | Outstanding issues |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| E1-S1 | Start a conversation | Must (P0) | 2 | 1 | Backend + Bot engineer | — | FR-01; L292 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-04: AC1 shows Share-phone on /start, but E1-S3/JRN-01 require consent first |
+| E1-S2 | Register with phone number and name | Must (P0) | 3 | 1 | Backend + Bot engineer | E1-S1, E1-S3 | FR-01; L306 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | GAP-10: walk-in patients without Telegram ID (IMP-14) |
+| E1-S3 | Give consent before data is stored | Must (P0) | 1 | 1 | Backend + Bot engineer | — | FR-01; L321 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E1-S4 | Delete my data | Should (P1) | 2 | 6 | Backend + Bot engineer | E1-S2, E3-S3 | FR-17; L335 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-25: telegram_user_id must also be cleared so AC3 holds |
+| E2-S1 | List doctors and specialties | Must (P0) | 2 | 1 | Backend + AI agent engineer | — | FR-02; L355 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E2-S2 | Check available slots | Must (P0) | 5 | 2 | Backend + AI agent engineer | E2-S1 | FR-03; L369 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | GAP-14: part-of-day boundaries undefined; GAP-33: 'next 3 dates' scope |
+| E2-S3 | Book with explicit confirmation | Must (P0) | 5 | 2 | Backend + AI agent engineer | E2-S2 | FR-04; L384 | AC1, AC2, AC3, AC4, AC5 | NOT_STARTED | NOT_STARTED | — | — | GAP-34: 'nearest free slots' count undefined; GAP-20: limits during reschedule |
+| E2-S4 | Prevent double booking | Must (P0) | 3 | 2 | Database architect + Backend engineer | — | FR-05; L400 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E2-S5 | Understand relative dates | Should (P1) | 3 | 3 | Backend + AI agent engineer | E2-S2 | FR-11; L415 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-15: 'near a month end' and 'next Monday' undefined |
+| E3-S1 | View my appointments | Must (P0) | 2 | 3 | Backend + AI agent engineer | E2-S3 | FR-06; L501 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E3-S2 | Reschedule an appointment | Must (P0) | 5 | 3 | Backend + AI agent engineer | E3-S1, E2-S4 | FR-06; L515 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | GAP-20: limit checks must exclude the appointment being moved |
+| E3-S3 | Cancel an appointment | Must (P0) | 3 | 3 | Backend + AI agent engineer | E3-S1 | FR-06; L530 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E4-S1 | 24-hour reminder | Must (P0) | 3 | 4 | Backend engineer (scheduler) | E2-S3 | FR-07; L551 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | GAP-39: reminder window lower bound; GAP-19: failure after retries |
+| E4-S2 | 2-hour reminder | Should (P1) | 1 | 4 | Backend engineer (scheduler) | E4-S1 | FR-12; L566 | AC1, AC2 | NOT_STARTED | NOT_STARTED | — | — | GAP-19: 2h reminder for bookings made <2h ahead unspecified |
+| E4-S3 | Act on reminder buttons | Must (P0) | 3 | 4 | Backend engineer (scheduler) | E4-S1, E3-S2, E3-S3 | FR-07; L579 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-05: no 'confirmed by patient' field (IMP-08) |
+| E4-S4 | Notify patients of clinic-side changes | Should (P1) | 3 | 5 | Backend engineer (scheduler) | E6-S3 | FR-13; L593 | AC1, AC2 | NOT_STARTED | NOT_STARTED | — | — | GAP-06: no flag field (IMP-09) |
+| E5-S1 | Answer clinic questions | Should (P1) | 3 | 4 | AI agent + Security engineer | — | FR-14; L612 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | IMP-02: no story for FAQ editor UI |
+| E5-S2 | Refuse medical advice | Must (P0) | 3 | 3 | AI agent + Security engineer | — | FR-08; L626 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E5-S3 | Redirect emergencies | Must (P0) | 2 | 2 | AI agent + Security engineer | — | FR-08; L640 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-07: no alerts table (IMP-06); store no message text |
+| E5-S4 | Hand off to a human | Should (P1) | 3 | 4 | AI agent + Security engineer | — | FR-15; L656 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-08: resolver fields missing (IMP-07); GAP-32 'fails 3 times' undefined |
+| E6-S1 | Staff login | Must (P0) | 3 | 5 | Frontend + Backend engineer | — | FR-09; L676 | AC1, AC2, AC3, AC4 | NOT_STARTED | NOT_STARTED | — | — | GAP-11: Doctor persona has no role; IMP-04 provisioning; GAP-23 lockout window field |
+| E6-S2 | View the daily schedule | Must (P0) | 3 | 5 | Frontend + Backend engineer | E6-S1 | FR-09; L691 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E6-S3 | Manage doctor schedules and leave | Must (P0) | 5 | 5 | Frontend + Backend engineer | E6-S1 | FR-09; L705 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-09: breaks need multiple schedule rows per weekday |
+| E6-S4 | Book or cancel for walk-in and phone patients | Should (P1) | 3 | 5 | Frontend + Backend engineer | E6-S2, E2-S4 | FR-16; L719 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-10: consent for staff-registered patients unspecified |
+| E6-S5 | Mark attendance | Should (P1) | 2 | 6 | Frontend + Backend engineer | E6-S2 | FR-16; L733 | AC1, AC2 | NOT_STARTED | NOT_STARTED | — | — | GAP-22: correction of attendance marks unspecified |
+| E6-S6 | Weekly booking metrics | Could (P2) | 3 | 6 | Frontend + Backend engineer | E6-S5 | FR-18; L746 | AC1, AC2 | NOT_STARTED | NOT_STARTED | — | — | GAP-24: no-show rate denominator undefined |
+| E7-S1 | Project setup and configuration | Must (P0) | 2 | 1 | DevOps / platform engineer | — | —; L765 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-16: '2 weeks of schedules' vs weekly-pattern schedule model |
+| E7-S2 | Audit log of agent actions | Must (P0) | 3 | 1 | Backend + Security engineer | E7-S1 | FR-10; L779 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | GAP-18: staff actions not covered by audit requirement |
+| E7-S3 | Rate limiting and input validation | Should (P1) | 2 | 4 | Backend + Security engineer | — | —; L793 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E7-S4 | Prompt injection resilience | Should (P1) | 3 | 6 | Security + QA engineer | E2-S3, E3-S1 | —; L807 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E7-S5 | Agent evaluation suite | Must (P0) | 5 | 6 | QA automation + AI agent engineer | E2 to E5 P0 stories | —; L821 | AC1, AC2, AC3 | NOT_STARTED | NOT_STARTED | — | — | — |
+| E7-S6 | Demo packaging | Should (P1) | 2 | 6 | DevOps / platform engineer | E7-S1 | —; L835 | AC1, AC2 | NOT_STARTED | NOT_STARTED | — | — | Docker not installed on this machine (DEP-EXT-03) |
