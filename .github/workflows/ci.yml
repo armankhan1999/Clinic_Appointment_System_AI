@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ENV: test
+      SUPABASE_PROJECT_REF: ""
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: postgres
+      DB_SSL: disable
+      DB_MIGRATOR_PASSWORD: ci-migrator-password
+      DB_APP_PASSWORD: ci-app-password
+      DB_TEST_APP_PASSWORD: ci-test-app-password
+      TELEGRAM_BOT_TOKEN: "0:ci-placeholder-not-a-token"
+      GEMINI_API_KEY: ci-placeholder-not-a-key
+      GEMINI_MODEL: gemini-3.5-flash-lite
+      CLINIC_TIMEZONE: Asia/Kolkata
+      PGPASSWORD: postgres
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+      - name: Bootstrap database roles and schemas
+        run: |
+          for f in ci_prelude.sql bootstrap.sql ci_roles.sql; do
+            psql -v ON_ERROR_STOP=1 -h localhost -U postgres -d postgres -f "../../infrastructure/db/$f"
+          done
+      - name: Install dependencies (locked)
+        run: uv sync --locked
+      - name: Lint and format
+        run: |
+          uv run ruff check
+          uv run ruff format --check
+      - name: Type check
+        run: uv run mypy
+      - name: Migrate the test schema
+        run: uv run alembic -x schema=clinic_test upgrade head
+      - name: Tests (unit + integration; live and eval excluded)
+        run: uv run pytest -q
+      - name: Dependency audit
+        run: uv run python -m pip_audit --skip-editable

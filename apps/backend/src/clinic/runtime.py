@@ -11,6 +11,7 @@ from clinic.agent.tools import AgentServices, build_registry
 from clinic.config import DbTarget, Settings
 from clinic.conversation.service import ConversationService
 from clinic.db.session import make_engine, make_session_factory
+from clinic.services.availability import AvailabilityService
 from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.doctors import DoctorService
 from clinic.services.patients import PatientService
@@ -36,11 +37,16 @@ def build_bot_runtime(settings: Settings) -> BotRuntime:
         actor_id=settings.gemini_model,
         budget_seconds=settings.llm_timeout_seconds,
     )
+    clinic_settings = ClinicSettingsService(session_factory)
+    services = AgentServices(
+        doctors=DoctorService(session_factory),
+        availability=AvailabilityService(session_factory, clinic_settings),
+    )
     conversation = ConversationService(
         patients=PatientService(session_factory),
-        settings=ClinicSettingsService(session_factory),
+        settings=clinic_settings,
         agent=agent,
         memory=ConversationMemory(),
-        services=AgentServices(doctors=DoctorService(session_factory)),
+        services=services,
     )
     return BotRuntime(engine=engine, conversation=conversation)

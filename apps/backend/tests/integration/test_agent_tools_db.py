@@ -9,6 +9,8 @@ from clinic.agent.loop import AuditEntry, db_audit_writer
 from clinic.agent.tools import AgentServices, ListDoctorsArgs, ToolContext, list_doctors
 from clinic.db.models import AuditLog
 from clinic.domain.results import ResultCode
+from clinic.services.availability import AvailabilityService
+from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.doctors import DoctorService
 
 from .factories import make_doctor
@@ -17,7 +19,9 @@ Factory = async_sessionmaker[AsyncSession]
 
 
 def _ctx(session_factory: Factory) -> ToolContext:
-    return ToolContext(uuid.uuid4(), "req-tool", AgentServices(doctors=DoctorService(session_factory)))
+    settings = ClinicSettingsService(session_factory)
+    services = AgentServices(DoctorService(session_factory), AvailabilityService(session_factory, settings))
+    return ToolContext(uuid.uuid4(), "req-tool", services)
 
 
 async def test_list_doctors_returns_active_doctors_only(session_factory: Factory) -> None:

@@ -13,6 +13,7 @@ from clinic.agent.tools import AgentServices, build_registry
 from clinic.conversation.replies import IncomingUser, Reply
 from clinic.conversation.service import ConversationService
 from clinic.db.models import HandoffTicket, Patient
+from clinic.services.availability import AvailabilityService
 from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.doctors import DoctorService
 from clinic.services.patients import PatientService
@@ -40,7 +41,10 @@ async def build(session_factory: Factory, llm: Any, *, budget: float = 8.0) -> C
         settings=ClinicSettingsService(session_factory),
         agent=agent,
         memory=ConversationMemory(),
-        services=AgentServices(doctors=DoctorService(session_factory)),
+        services=AgentServices(
+            doctors=DoctorService(session_factory),
+            availability=AvailabilityService(session_factory, ClinicSettingsService(session_factory)),
+        ),
         clock=lambda: NOW,
     )
 

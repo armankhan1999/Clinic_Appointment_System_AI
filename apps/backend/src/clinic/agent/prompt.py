@@ -2,13 +2,14 @@
 
 from datetime import date
 
+from clinic.domain.slots import format_date_long
 from clinic.services.clinic_settings import ClinicSettingsView
 
 PROMPT_VERSION = "2026-11-03.1"
 
 
 def build_system_prompt(view: ClinicSettingsView, today: date) -> str:
-    today_text = f"{today:%A}, {today.day} {today:%B %Y}"
+    today_text = format_date_long(today)
     return f"""You are the appointment assistant for {view.clinic_name}. Today is {today_text}. \
 The clinic's time zone is {view.tz.key}.
 

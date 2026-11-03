@@ -4,12 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from clinic.domain.dates import Ambiguous, Resolved, resolve_date
 from clinic.domain.results import ResultCode
+from clinic.domain.slots import PartOfDay, format_date_long, format_time_12h
+from clinic.services.availability import AvailabilityService, DayAvailability
 from clinic.services.doctors import DoctorService
 
 WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -18,6 +21,7 @@ WEEKDAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturd
 @dataclass(frozen=True)
 class AgentServices:
     doctors: DoctorService
+    availability: AvailabilityService
 
 
 @dataclass(frozen=True)
@@ -127,5 +131,85 @@ LIST_DOCTORS = ToolSpec(
 )
 
 
+class CheckAvailabilityArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    doctor_id: UUID = Field(description="The doctor_id returned by list_doctors.")
+    date: str = Field(
+        min_length=1,
+        max_length=40,
+        description=(
+            "The day the patient asked for, exactly as they said it or as YYYY-MM-DD: for example 'today', "
+            "'tomorrow', 'day after tomorrow', 'next Monday', '12 January' or 'the 5th'. Do not convert it."
+        ),
+    )
+    part_of_day: Literal["morning", "afternoon", "evening"] | None = Field(
+        default=None, description="Only when the patient asked for a part of the day."
+    )
+
+
+def _day(day: Any) -> dict[str, str]:
+    return {"date": format_date_long(day), "date_iso": day.isoformat()}
+
+
+def _availability_payload(result: DayAvailability, max_slots: int) -> dict[str, Any]:
+    data: dict[str, Any] = {"doctor": result.doctor_name, **_day(result.day)}
+    if result.slots:
+        data["slots"] = [
+            {"slot_start": slot.start.isoformat(), "time": format_time_12h(slot.start)}
+            for slot in result.slots[:max_slots]
+        ]
+    if result.next_dates:
+        data["next_dates_with_free_slots"] = [_day(day) for day in result.next_dates]
+    if result.next_working_day is not None:
+        data["next_working_day"] = _day(result.next_working_day)
+    if result.other_parts:
+        data["other_parts_of_day_with_slots"] = [part.value for part in result.other_parts]
+    return data
+
+
+MAX_SLOTS_SHOWN = 5  # E2-S2-AC1
+
+
+async def check_availability(ctx: ToolContext, args: CheckAvailabilityArgs) -> ToolResult:
+    """TOOL-02 / E2-S2: the date phrase is resolved by code in the clinic time zone (GAP-36)."""
+    availability = ctx.require_services().availability
+    view = await availability.settings()
+    today = availability.now().astimezone(view.tz).date()
+    resolution = resolve_date(args.date, today)
+    if isinstance(resolution, Ambiguous):
+        return ToolResult(ResultCode.AMBIGUOUS_DATE, {"ask_patient": "Which month do you mean?"})
+    if not isinstance(resolution, Resolved):
+        return ToolResult(
+            ResultCode.INVALID_DATE,
+            {"problem": "The date was not understood. Ask for a day such as 'tomorrow' or '12 January'."},
+        )
+    part = PartOfDay(args.part_of_day) if args.part_of_day else None
+    result = await availability.day(args.doctor_id, resolution.day, part)
+    if result.code is ResultCode.INVALID_DATE:
+        return ToolResult(
+            ResultCode.INVALID_DATE,
+            {
+                **_day(result.day),
+                "problem": (
+                    f"Appointments can be booked from today up to {view.booking_window_days} days ahead."
+                ),
+            },
+        )
+    if result.code is ResultCode.NOT_FOUND:
+        return ToolResult(ResultCode.NOT_FOUND, {"problem": "No active doctor has that doctor_id."})
+    return ToolResult(result.code, _availability_payload(result, MAX_SLOTS_SHOWN))
+
+
+CHECK_AVAILABILITY = ToolSpec(
+    name="check_availability",
+    description=(
+        "Find free appointment slots for one doctor on one day. Returns up to 5 slots with their slot_start "
+        "values, or the next dates that have free slots. Always use it before naming any time."
+    ),
+    args_model=CheckAvailabilityArgs,
+    executor=check_availability,
+)
+
+
 def build_registry() -> ToolRegistry:
-    return ToolRegistry([LIST_DOCTORS])
+    return ToolRegistry([LIST_DOCTORS, CHECK_AVAILABILITY])
