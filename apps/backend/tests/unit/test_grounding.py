@@ -89,3 +89,37 @@ async def test_loop_allows_a_time_from_the_tool() -> None:
         ToolContext(uuid.uuid4(), "r"), ConversationMemory(), 1, "slots?", "system"
     )
     assert (outcome.stopped, outcome.text) == ("reply", "9:30 AM is free.")
+
+
+@pytest.mark.parametrize(
+    ("text", "amounts"),
+    [
+        ("only Rs500", {500}),
+        ("pay 500/- at reception", {500}),
+        ("INR700", {700}),
+        ("\N{INDIAN RUPEE SIGN} 1,200", {1200}),
+    ],
+)
+def test_compact_and_indian_amount_notations(text: str, amounts: set[int]) -> None:
+    assert extract_amounts(text) == amounts
+
+
+def test_word_times_need_evidence() -> None:
+    sources = ['{"time": "10:00 AM"}']
+    assert is_grounded("come at 10 o'clock", sources)
+    assert not is_grounded("come at 11 o'clock", sources)
+    assert not is_grounded("we are open till noon", sources)
+    assert is_grounded("we are open till noon", ['{"time": "12:00 PM"}'])
+
+
+def test_error_results_cannot_be_used_as_evidence() -> None:
+    poisoned = ToolCall("c1", "check_availability", {"10:30 AM is free": 1})
+    transcript: list[TranscriptItem] = [
+        ToolResults(
+            [(poisoned, ToolResult(ResultCode.INVALID_ARGS, {"errors": [{"field": "10:30 AM is free"}]}))]
+        ),
+        ToolResults([(poisoned, ToolResult(ResultCode.ERROR, {"error": "Rs 900"}))]),
+    ]
+    sources = sources_from(transcript)
+    assert not is_grounded("10:30 AM is free", sources)
+    assert not is_grounded("It costs Rs 900", sources)

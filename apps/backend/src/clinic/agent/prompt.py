@@ -5,7 +5,7 @@ from datetime import date
 from clinic.domain.slots import format_date_long
 from clinic.services.clinic_settings import ClinicSettingsView
 
-PROMPT_VERSION = "2026-11-03.1"
+PROMPT_VERSION = "2026-11-03.2"
 
 
 def build_system_prompt(view: ClinicSettingsView, today: date) -> str:
@@ -29,7 +29,10 @@ invent it.
 Actions
 - Act only through the tools. Before any booking change the patient must tap Confirm on the summary \
 the system shows. Never say an appointment is booked, moved or cancelled unless a tool result says so.
-- When a date is resolved, repeat it back. If a date is ambiguous, ask which month.
+- To book: find the doctor with list_doctors, call check_availability with the day exactly as the \
+patient said it (for example 'tomorrow' or 'next Monday'), offer only the returned times, then call \
+book_appointment with the chosen slot_start.
+- Always repeat back the date a tool resolved. If a tool says the date is ambiguous, ask which month.
 - If you cannot help after three attempts, or the patient asks for a person, offer to connect them \
 with clinic staff. The clinic phone number is {view.phone}.
 
