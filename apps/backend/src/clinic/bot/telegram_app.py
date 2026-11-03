@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Protocol
 
 import structlog
 from telegram import (
@@ -15,7 +15,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ChatType
-from telegram.error import BadRequest
+from telegram.error import BadRequest, TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -30,6 +30,8 @@ from telegram.ext import (
 from clinic.conversation.service import ConversationService
 from clinic.domain.messages import IncomingUser, Reply
 from clinic.observability import safe_exception_fields
+from clinic.services.notifications import NotificationService
+from clinic.services.reminders import DeliveryError, ReminderService
 
 log = structlog.get_logger(__name__)
 
@@ -121,6 +123,53 @@ async def _send(send: Sender, reply: Reply) -> None:
     chunks = split_message(reply.text)
     for index, chunk in enumerate(chunks):
         await send(chunk, reply_markup=to_markup(reply) if index == len(chunks) - 1 else None)
+
+
+class _SendsMessages(Protocol):
+    async def send_message(self, chat_id: int, text: str, *, reply_markup: Markup = None) -> object: ...
+
+
+class TelegramSender:
+    """MessageSender for the reminder and outbox jobs; every Telegram failure becomes a DeliveryError."""
+
+    def __init__(self, bot: _SendsMessages) -> None:
+        self._bot = bot
+
+    async def send(self, chat_id: int, reply: Reply) -> None:
+        async def send_text(text: str, reply_markup: Markup = None) -> object:
+            return await self._bot.send_message(chat_id, text, reply_markup=reply_markup)
+
+        try:
+            await _send(send_text, reply)
+        except TelegramError as exc:
+            raise DeliveryError(type(exc).__name__) from exc
+
+
+JOB_INTERVALS = {"reminders": 300, "outbox": 60}  # seconds; E4-S1-AC1: the reminder job runs every 5 minutes
+
+
+def schedule_jobs(
+    application: BotApplication, reminders: ReminderService, notifications: NotificationService
+) -> None:
+    job_queue = application.job_queue
+    if job_queue is None:
+        raise RuntimeError("python-telegram-bot was installed without the job-queue extra")
+
+    async def run_reminders(_: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            await reminders.run_once()
+        except Exception as exc:  # one bad run must not stop the scheduler; logged
+            log.error("reminder_job_failed", **safe_exception_fields(exc))
+        log.info("scheduler_heartbeat", job="reminders")
+
+    async def run_outbox(_: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            await notifications.drain()
+        except Exception as exc:  # one bad run must not stop the scheduler; logged
+            log.error("outbox_job_failed", **safe_exception_fields(exc))
+
+    job_queue.run_repeating(run_reminders, interval=JOB_INTERVALS["reminders"], first=15, name="reminders")
+    job_queue.run_repeating(run_outbox, interval=JOB_INTERVALS["outbox"], first=20, name="outbox")
 
 
 class TelegramAdapter:

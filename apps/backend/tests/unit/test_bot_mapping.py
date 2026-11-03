@@ -75,3 +75,35 @@ async def test_user_locks_are_released_after_use() -> None:
     async with locks.hold(1):
         assert locks.active() == 1
     assert locks.active() == 0
+
+
+class _FailingBot:
+    async def send_message(self, chat_id: int, text: str, reply_markup: object = None) -> None:
+        from telegram.error import NetworkError
+
+        raise NetworkError("connection reset")
+
+
+class _RecordingBot:
+    def __init__(self) -> None:
+        self.sent: list[tuple[int, str]] = []
+
+    async def send_message(self, chat_id: int, text: str, reply_markup: object = None) -> None:
+        self.sent.append((chat_id, text))
+
+
+async def test_sender_maps_telegram_errors_to_delivery_errors() -> None:
+    from clinic.bot.telegram_app import TelegramSender
+    from clinic.services.reminders import DeliveryError
+
+    with pytest.raises(DeliveryError):
+        await TelegramSender(_FailingBot()).send(42, Reply("hello"))
+    recorder = _RecordingBot()
+    await TelegramSender(recorder).send(42, Reply("hello"))
+    assert recorder.sent == [(42, "hello")]
+
+
+def test_reminder_and_outbox_jobs_are_scheduled() -> None:
+    from clinic.bot.telegram_app import JOB_INTERVALS
+
+    assert JOB_INTERVALS == {"reminders": 300, "outbox": 60}, "E4-S1-AC1: reminders every 5 minutes"

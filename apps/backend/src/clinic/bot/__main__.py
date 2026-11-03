@@ -3,10 +3,12 @@
 import structlog
 from telegram import Update
 
-from clinic.bot.telegram_app import BotApplication, build_application
+from clinic.bot.telegram_app import BotApplication, TelegramSender, build_application, schedule_jobs
 from clinic.config import get_settings
 from clinic.observability import configure_logging
 from clinic.runtime import build_bot_runtime
+from clinic.services.notifications import NotificationService
+from clinic.services.reminders import ReminderService
 
 log = structlog.get_logger(__name__)
 
@@ -22,6 +24,12 @@ def main() -> None:
 
     application = build_application(
         settings.telegram_bot_token.get_secret_value(), runtime.conversation, on_shutdown=shutdown
+    )
+    sender = TelegramSender(application.bot)
+    schedule_jobs(
+        application,
+        ReminderService(runtime.session_factory, runtime.clinic_settings, sender),
+        NotificationService(runtime.session_factory, runtime.clinic_settings, sender),
     )
     log.info("bot_starting", mode="long_polling", model=settings.gemini_model)
     application.run_polling(allowed_updates=[Update.MESSAGE, Update.CALLBACK_QUERY])

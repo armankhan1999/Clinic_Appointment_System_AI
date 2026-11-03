@@ -27,6 +27,7 @@ from clinic.domain.results import ResultCode
 from clinic.domain.slots import format_date_long, format_time_12h
 from clinic.observability import bind_request_id, new_request_id, request_id_var, safe_exception_fields
 from clinic.services.clinic_settings import ClinicSettingsService, ClinicSettingsView
+from clinic.services.notifications import REBOOK
 from clinic.services.patients import PatientService, PatientView, PhoneCheck, RegistrationOutcome
 from clinic.services.reminders import REMINDER_CANCEL, REMINDER_CONFIRM, REMINDER_RESCHEDULE
 
@@ -257,6 +258,8 @@ class ConversationService:
             return [await self._actions.decide(user, CHANGE, value)]
         if kind == PICK:
             return [await self._actions.pick(user, value)]
+        if kind == REBOOK:
+            return [await self._rebook(user, value)]
         if kind in (REMINDER_CONFIRM, REMINDER_RESCHEDULE, REMINDER_CANCEL):
             return [await self._reminder_button(user, kind, value, view)]
         if kind == HANDOFF and value == "agent_failed":
@@ -344,6 +347,28 @@ class ConversationService:
             user.telegram_user_id,
             f"(The patient tapped Reschedule on the reminder for {appointment.reference} with "
             f"{appointment.doctor_name} on {when}.)",
+            text,
+        )
+        return Reply(text)
+
+    async def _rebook(self, user: IncomingUser, value: str) -> Reply:
+        patient = await self._patients.get_by_telegram(user.telegram_user_id)
+        try:
+            appointment_id = UUID(value)
+        except ValueError:
+            return Reply(EXPIRED)
+        if patient is None:
+            return Reply(EXPIRED)
+        check = await self._services.booking.check_change_by_id(patient.id, appointment_id)
+        if check.appointment is None:
+            return Reply(EXPIRED)
+        doctor = check.appointment.doctor_name
+        text = (
+            f"Sorry about the change. Which day would you like instead? I'll find free times with {doctor}."
+        )
+        self._note(
+            user.telegram_user_id,
+            f"(Clinic cancelled {check.appointment.reference} with {doctor}; patient wants a new time.)",
             text,
         )
         return Reply(text)

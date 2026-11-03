@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from clinic.agent.llm import GeminiLLM
 from clinic.agent.loop import AgentLoop, db_audit_writer
@@ -25,6 +25,8 @@ from clinic.services.patients import PatientService
 class BotRuntime:
     engine: AsyncEngine
     conversation: ConversationService
+    session_factory: async_sessionmaker[AsyncSession]
+    clinic_settings: ClinicSettingsService
 
     async def close(self) -> None:
         await self.engine.dispose()
@@ -57,4 +59,9 @@ def build_bot_runtime(settings: Settings) -> BotRuntime:
         memory=ConversationMemory(),
         services=services,
     )
-    return BotRuntime(engine=engine, conversation=conversation)
+    return BotRuntime(
+        engine=engine,
+        conversation=conversation,
+        session_factory=session_factory,
+        clinic_settings=clinic_settings,
+    )
