@@ -124,3 +124,17 @@ async def test_deleted_patient_is_treated_as_unknown(session_factory: Factory) -
     assert result.outcome == RegistrationOutcome.REGISTERED
     assert result.patient is not None
     assert result.patient.id != patient.id, "a deleted record must never be reactivated"
+
+
+async def test_flagging_a_phone_conflict_opens_one_ticket_for_the_owner(session_factory: Factory) -> None:
+    async with session_factory() as session:
+        owner = await make_patient(session, phone=PHONE, telegram_user_id=999)
+        await session.commit()
+    service = PatientService(session_factory)
+    await service.flag_phone_conflict(PHONE)
+    await service.flag_phone_conflict(PHONE)
+    async with session_factory() as session:
+        tickets = (await session.scalars(select(HandoffTicket))).all()
+        audit = (await session.scalars(select(AuditLog))).all()
+    assert [(t.patient_id, t.reason) for t in tickets] == [(owner.id, "registration_conflict")]
+    assert [a.action for a in audit] == ["patient.phone_conflict", "patient.phone_conflict"]

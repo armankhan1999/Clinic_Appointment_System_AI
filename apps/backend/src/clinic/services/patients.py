@@ -144,3 +144,23 @@ class PatientService:
             await session.flush()
             _audit(session, patient.id, outcome)
             return RegistrationResult(outcome, _view(patient))
+
+    async def flag_phone_conflict(self, phone: str) -> None:
+        """E1-S2-AC4: the sender's own number belongs to another Telegram account; ask staff to follow up."""
+        async with self._session_factory() as session, session.begin():
+            owner = await session.scalar(
+                select(Patient).where(Patient.phone == phone, Patient.deleted_at.is_(None))
+            )
+            if owner is None:
+                return
+            await TicketService.open_or_get(session, patient_id=owner.id, reason="registration_conflict")
+            AuditService.record(
+                session,
+                actor_type="patient_button",
+                actor_id=None,
+                action="patient.phone_conflict",
+                args={},
+                result="LINKED_ELSEWHERE",
+                patient_id=owner.id,
+                latency_ms=None,
+            )

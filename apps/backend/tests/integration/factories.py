@@ -84,3 +84,21 @@ async def make_appointment(
     session.add(appointment)
     await session.flush()
     return appointment
+
+
+async def make_clinic_settings(session: AsyncSession) -> None:
+    from clinic.db.models import ClinicSettings
+
+    session.add(
+        ClinicSettings(
+            id=1,
+            clinic_name="Demo Family Clinic",
+            phone="+12025550100",
+            address="12 Example Road",
+            staff_hours_text="Monday to Saturday, 9:00 AM to 6:00 PM",
+            timezone="Asia/Kolkata",
+            emergency_number="112",
+            emergency_phrases=["chest pain"],
+        )
+    )
+    await session.flush()
