@@ -13,7 +13,6 @@ from sqlalchemy import (
     Integer,
     MetaData,
     Table,
-    delete,
     func,
     literal,
     select,
@@ -144,17 +143,21 @@ async def test_reference_format_keeps_growing_past_six_digits(
     assert (big, small) == ("APT-1234567", "APT-000042")
 
 
-async def test_audit_log_is_insert_and_select_only_for_the_app_role(
+async def test_audit_log_grants_are_insert_and_select_only(
     settings: Settings, session_factory: Factory
 ) -> None:
+    # Grants are checked directly: the append-only trigger raises the same SQLSTATE (42501), so a failing
+    # UPDATE alone could not tell whether the REVOKE is in place.
+    table = f"{settings.db_test_schema}.audit_log"
     async with session_factory() as session:
-        session.add(AuditLog(actor_type="system", action="test.write", args_json={}, result="OK"))
-        await session.commit()
-    for statement in (update(AuditLog).values(result="X"), delete(AuditLog)):
-        async with session_factory() as session:
-            with pytest.raises(DBAPIError) as caught:
-                await session.execute(statement)
-            assert sqlstate(caught.value) == "42501"
+        rights = {
+            privilege: await session.scalar(
+                text("select has_table_privilege(current_user, :table, :privilege)"),
+                {"table": table, "privilege": privilege},
+            )
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE")
+        }
+    assert rights == {"SELECT": True, "INSERT": True, "UPDATE": False, "DELETE": False, "TRUNCATE": False}
 
 
 async def test_audit_log_trigger_blocks_changes_even_for_the_owner(

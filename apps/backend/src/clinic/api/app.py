@@ -109,7 +109,7 @@ def create_app(settings: Settings | None = None, *, readiness: Readiness | None 
             try:
                 response = await call_next(request)
             except Exception as exc:
-                log.error(  # noqa: TRY400  # no traceback text: messages can carry personal data
+                log.error(
                     "http_unhandled_error",
                     method=request.method,
                     path=request.url.path,

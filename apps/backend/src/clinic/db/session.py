@@ -34,21 +34,34 @@ def database_ssl(settings: Settings) -> ssl.SSLContext | str | bool:
     return "require"
 
 
+CONNECT_TIMEOUT_S = 10
+# Longer than the app roles' statement_timeout (10 s, bootstrap.sql) so Postgres cancels first; this bound
+# catches a half-open pooler connection that would otherwise hang a handler indefinitely.
+COMMAND_TIMEOUT_S = 15
+POOL_TIMEOUT_S = 10
+
+
+def connect_args(target: DbTarget, settings: Settings) -> dict[str, Any]:
+    return {
+        "ssl": database_ssl(settings),
+        "timeout": CONNECT_TIMEOUT_S,
+        "command_timeout": COMMAND_TIMEOUT_S,
+        "server_settings": {"application_name": f"clinic-{target.role}"},
+    }
+
+
 def make_engine(target: DbTarget, settings: Settings, *, null_pool: bool = False) -> AsyncEngine:
     options: dict[str, Any] = {
         "pool_pre_ping": True,
         # SQL errors must never carry bound values such as phone numbers into logs.
         "hide_parameters": True,
-        "connect_args": {
-            "ssl": database_ssl(settings),
-            "server_settings": {"application_name": f"clinic-{target.role}"},
-        },
+        "connect_args": connect_args(target, settings),
         "execution_options": {"schema_translate_map": {None: target.schema}},
     }
     if null_pool:
         options["poolclass"] = NullPool
     else:
-        options.update(pool_size=5, max_overflow=5, pool_recycle=1800)
+        options.update(pool_size=5, max_overflow=5, pool_recycle=1800, pool_timeout=POOL_TIMEOUT_S)
     return create_async_engine(target.url(settings), **options)
 
 

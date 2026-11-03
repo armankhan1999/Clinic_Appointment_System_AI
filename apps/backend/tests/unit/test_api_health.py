@@ -88,3 +88,18 @@ async def test_api_docs_only_in_development() -> None:
     ) as c:
         assert (await c.get("/api/v1/openapi.json")).status_code == 404
         assert (await c.get("/api/v1/docs")).status_code == 404
+
+
+async def test_unhandled_error_becomes_a_500_envelope_without_internals() -> None:
+    app = create_app(make_settings(), readiness=ready)
+
+    @app.get("/boom")
+    async def boom() -> None:
+        raise RuntimeError("secret internal detail +12025550150")
+
+    async with client(app) as c:
+        response = await c.get("/boom")
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "ERROR"
+    assert "secret" not in response.text
+    assert "2025550150" not in response.text

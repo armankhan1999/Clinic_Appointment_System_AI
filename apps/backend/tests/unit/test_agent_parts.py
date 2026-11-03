@@ -98,3 +98,18 @@ def test_tool_result_payload_shape() -> None:
         "data": {"doctors": []},
     }
     assert uuid.UUID(int=1)
+
+
+def test_schema_keeps_arguments_named_like_schema_keywords() -> None:
+    from pydantic import BaseModel, ConfigDict
+
+    class Awkward(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        title: str
+        default: int | None = None
+
+    schema = tool_json_schema(Awkward)
+    assert set(schema["properties"]) == {"title", "default"}
+    assert schema["required"] == ["title"]
+    assert "title" not in schema["properties"]["title"]
+    assert schema["properties"]["default"]["type"] == "integer"

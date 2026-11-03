@@ -24,26 +24,37 @@ class Step(StrEnum):
 class RegistrationState:
     step: Step
     started_at: datetime
+    last_active: datetime
     consented_at: datetime | None = None
     phone: str | None = None
 
 
 class RegistrationStore:
-    """Abandoned flows expire after STATE_TTL so memory cannot grow without bound."""
+    """Flows idle for STATE_TTL are forgotten; abandoned ones are pruned whenever a new flow starts."""
 
     def __init__(self, clock: Callable[[], datetime]) -> None:
         self._clock = clock
         self._states: dict[int, RegistrationState] = {}
 
+    def __len__(self) -> int:
+        return len(self._states)
+
     def get(self, user_id: int) -> RegistrationState | None:
         state = self._states.get(user_id)
-        if state is not None and self._clock() - state.started_at > STATE_TTL:
+        now = self._clock()
+        if state is None:
+            return None
+        if now - state.last_active > STATE_TTL:
             del self._states[user_id]
             return None
+        state.last_active = now
         return state
 
     def start(self, user_id: int) -> RegistrationState:
-        state = RegistrationState(Step.CONSENT, self._clock())
+        now = self._clock()
+        for idle in [uid for uid, state in self._states.items() if now - state.last_active > STATE_TTL]:
+            del self._states[idle]
+        state = RegistrationState(Step.CONSENT, now, now)
         self._states[user_id] = state
         return state
 

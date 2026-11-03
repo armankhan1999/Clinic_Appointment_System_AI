@@ -54,3 +54,24 @@ def test_callback_data_over_64_bytes_is_rejected_at_construction() -> None:
 )
 def test_only_private_chats_are_served(chat_type: str, served: bool) -> None:
     assert serves_chat(chat_type) is served
+
+
+def test_long_replies_are_split_at_telegrams_limit_on_line_breaks() -> None:
+    from clinic.bot.telegram_app import TELEGRAM_MAX_MESSAGE, split_message
+
+    text = "\n".join(f"line {i} " + "x" * 90 for i in range(100))
+    parts = split_message(text)
+    assert len(parts) > 1
+    assert all(len(part) <= TELEGRAM_MAX_MESSAGE for part in parts)
+    assert "\n".join(parts) == text
+    assert split_message("short") == ["short"]
+    assert all(len(p) <= TELEGRAM_MAX_MESSAGE for p in split_message("y" * 9000))
+
+
+async def test_user_locks_are_released_after_use() -> None:
+    from clinic.bot.telegram_app import UserLocks
+
+    locks = UserLocks()
+    async with locks.hold(1):
+        assert locks.active() == 1
+    assert locks.active() == 0

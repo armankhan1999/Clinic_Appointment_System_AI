@@ -138,3 +138,21 @@ async def test_flagging_a_phone_conflict_opens_one_ticket_for_the_owner(session_
         audit = (await session.scalars(select(AuditLog))).all()
     assert [(t.patient_id, t.reason) for t in tickets] == [(owner.id, "registration_conflict")]
     assert [a.action for a in audit] == ["patient.phone_conflict", "patient.phone_conflict"]
+
+
+async def test_two_accounts_registering_one_phone_at_once_link_only_one(session_factory: Factory) -> None:
+    import asyncio
+
+    service = PatientService(session_factory)
+    results = await asyncio.gather(
+        *(
+            service.register_from_telegram(
+                telegram_user_id=user_id, phone=PHONE, full_name="Asha Rao", consented_at=CONSENT
+            )
+            for user_id in (111, 222)
+        )
+    )
+    outcomes = sorted(r.outcome for r in results)
+    assert outcomes == [RegistrationOutcome.LINKED_ELSEWHERE, RegistrationOutcome.REGISTERED]
+    async with session_factory() as session:
+        assert len((await session.scalars(select(Patient))).all()) == 1

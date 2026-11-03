@@ -68,12 +68,22 @@ class AgentLoop:
     async def run(
         self, ctx: ToolContext, memory: ConversationMemory, user_key: int, user_text: str, system_prompt: str
     ) -> AgentOutcome:
-        deadline = time.monotonic() + self._budget
+        """The budget covers model calls, tool execution and audit writes together (E1-S1-AC3)."""
+        try:
+            async with asyncio.timeout(self._budget):
+                return await self._run(ctx, memory, user_key, user_text, system_prompt)
+        except TimeoutError:
+            log.warning("agent_budget_exhausted", budget_s=self._budget)
+            return AgentOutcome(None, "llm_error", 0)
+
+    async def _run(
+        self, ctx: ToolContext, memory: ConversationMemory, user_key: int, user_text: str, system_prompt: str
+    ) -> AgentOutcome:
         exchange: list[Any] = [UserText(user_text)]
         calls_made = 0
         results_seen: list[tuple[str, ToolResult]] = []
         while True:
-            turn = await self._generate(system_prompt, memory.history(user_key) + exchange, deadline)
+            turn = await self._generate(system_prompt, memory.history(user_key) + exchange)
             if turn is None:
                 return AgentOutcome(None, "llm_error", calls_made, tuple(results_seen))
             exchange.append(ModelTurn(turn))
@@ -95,19 +105,9 @@ class AgentLoop:
                 results_seen.append((call.name, result))
             exchange.append(ToolResults(results))
 
-    async def _generate(self, system: str, transcript: list[Any], deadline: float) -> LlmTurn | None:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            log.warning("agent_budget_exhausted")
-            return None
+    async def _generate(self, system: str, transcript: list[Any]) -> LlmTurn | None:
         try:
-            async with asyncio.timeout(remaining):
-                return await self._llm.generate(
-                    system=system, transcript=transcript, tools=self._registry.specs
-                )
-        except TimeoutError:
-            log.warning("agent_budget_exhausted")
-            return None
+            return await self._llm.generate(system=system, transcript=transcript, tools=self._registry.specs)
         except LlmUnavailableError:
             return None
 
@@ -122,8 +122,14 @@ class AgentLoop:
             try:
                 args = spec.args_model.model_validate(call.args)
             except ValidationError as exc:
-                fields = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
-                audit_args = {"invalid_fields": fields}
+                # Only declared field names reach the audit log: unexpected keys are model-invented text.
+                known = set(spec.args_model.model_fields)
+                audit_args = {
+                    "invalid_fields": sorted(
+                        {str(e["loc"][0]) for e in exc.errors() if e["loc"] and e["loc"][0] in known}
+                    ),
+                    "unexpected_fields": sum(1 for e in exc.errors() if e["type"] == "extra_forbidden"),
+                }
                 result = ToolResult(
                     ResultCode.INVALID_ARGS,
                     {
@@ -138,24 +144,30 @@ class AgentLoop:
                     result = await spec.executor(ctx, args)
                 except Exception as exc:
                     # The model gets a generic error; operators get the type and code location only.
-                    log.error("tool_failed", tool=spec.name, **safe_exception_fields(exc))  # noqa: TRY400
+                    log.error("tool_failed", tool=spec.name, **safe_exception_fields(exc))
                     result = ToolResult(
                         ResultCode.ERROR, {"error": "the tool failed, try again or offer staff help"}
                     )
         latency_ms = int((time.perf_counter() - started) * 1000)
         log.info("agent_tool_call", tool=action, result=result.code.value, latency_ms=latency_ms)
-        await self._write_audit(
-            AuditEntry(
-                actor_id=self._actor_id,
-                action=action,
-                args=audit_args,
-                result=result.code.value,
-                patient_id=ctx.patient_id,
-                latency_ms=latency_ms,
-                request_id=ctx.request_id,
-            )
-        )
+        try:
+            await self._write_audit(self._entry(ctx, action, audit_args, result, latency_ms))
+        except Exception as exc:  # the reply must not be lost; the failure is logged for operators
+            log.error("audit_write_failed", tool=action, **safe_exception_fields(exc))
         return result
+
+    def _entry(
+        self, ctx: ToolContext, action: str, audit_args: dict[str, Any], result: ToolResult, latency_ms: int
+    ) -> AuditEntry:
+        return AuditEntry(
+            actor_id=self._actor_id,
+            action=action,
+            args=audit_args,
+            result=result.code.value,
+            patient_id=ctx.patient_id,
+            latency_ms=latency_ms,
+            request_id=ctx.request_id,
+        )
 
 
 def db_audit_writer(session_factory: async_sessionmaker[AsyncSession]) -> AuditWriter:

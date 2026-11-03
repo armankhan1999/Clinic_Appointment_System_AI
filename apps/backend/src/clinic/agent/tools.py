@@ -67,15 +67,25 @@ class ToolRegistry:
         return list(self._specs.values())
 
 
-def _simplify(node: Any) -> Any:
-    """Pydantic JSON schema → the plain subset function-calling APIs accept (no titles, no null unions)."""
+def _simplify(node: Any, *, field_map: bool = False) -> Any:
+    """Pydantic JSON schema → the plain subset function-calling APIs accept (no titles, no null unions).
+
+    Inside a `properties` map the keys are argument names, so they are kept even when an argument is
+    called `title` or `default`.
+    """
     if isinstance(node, list):
         return [_simplify(item) for item in node]
     if not isinstance(node, dict):
         return node
+    if field_map:
+        return {name: _simplify(schema) for name, schema in node.items()}
     if "$defs" in node or "$ref" in node:
         raise NotImplementedError("nested models are not supported in tool arguments")
-    result = {key: _simplify(value) for key, value in node.items() if key not in {"title", "default"}}
+    result = {
+        key: _simplify(value, field_map=key == "properties")
+        for key, value in node.items()
+        if key not in {"title", "default"}
+    }
     variants = result.pop("anyOf", None)
     if variants is not None:
         non_null = [v for v in variants if v.get("type") != "null"]

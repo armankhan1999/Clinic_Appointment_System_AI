@@ -1,5 +1,6 @@
 """Agent loop: AGT-06 (5 tool calls max), E7-S3-AC3 (invalid args), E2-S3-AC5 (patient id), E7-S2-AC1."""
 
+import asyncio
 import time
 import uuid
 from typing import Any
@@ -191,3 +192,46 @@ async def test_tool_failure_log_contains_no_exception_message(capsys: pytest.Cap
     output = capsys.readouterr().out
     assert "tool_failed" in output
     assert "exploded" not in output
+
+
+class SlowTool:
+    async def __call__(self, ctx: ToolContext, args: EchoArgs) -> ToolResult:
+        await asyncio.sleep(5)
+        return ToolResult(ResultCode.OK, {})
+
+
+async def test_budget_also_covers_tool_execution() -> None:
+    registry = ToolRegistry([ToolSpec("echo", "Echo a word.", EchoArgs, SlowTool())])
+
+    async def write(entry: AuditEntry) -> None:
+        return None
+
+    loop = AgentLoop(
+        ScriptedLLM(call_turn(("echo", {"word": "hi"}))), registry, write, actor_id="t", budget_seconds=0.3
+    )
+    started = time.monotonic()
+    outcome = await loop.run(ctx(), ConversationMemory(), 1, "x", "system")
+    assert outcome.stopped == "llm_error"
+    assert time.monotonic() - started < 1.5
+
+
+async def test_audit_failure_does_not_lose_the_reply() -> None:
+    async def failing_audit(entry: AuditEntry) -> None:
+        raise ConnectionError("audit database unreachable")
+
+    registry = ToolRegistry([ToolSpec("echo", "Echo a word.", EchoArgs, Recorder())])
+    llm = ScriptedLLM(call_turn(("echo", {"word": "hi"})), text_turn("You said hi"))
+    outcome = await AgentLoop(llm, registry, failing_audit, actor_id="t").run(
+        ctx(), ConversationMemory(), 1, "x", "s"
+    )
+    assert (outcome.stopped, outcome.text) == ("reply", "You said hi")
+
+
+async def test_invented_argument_names_never_reach_the_audit_log() -> None:
+    audit: list[AuditEntry] = []
+    invented = {"word": "hi", "I have chest pain since Monday": 1}
+    llm = ScriptedLLM(call_turn(("echo", invented)), text_turn("ok"))
+    await make_loop(llm, Recorder(), audit).run(ctx(), ConversationMemory(), 1, "x", "system")
+    assert audit[0].result == "INVALID_ARGS"
+    assert "chest pain" not in repr(audit[0].args)
+    assert audit[0].args == {"invalid_fields": [], "unexpected_fields": 1}

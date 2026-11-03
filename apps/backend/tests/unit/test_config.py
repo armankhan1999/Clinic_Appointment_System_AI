@@ -123,3 +123,8 @@ def test_api_port_defaults_to_8000_and_is_validated() -> None:
 def test_plain_postgres_uses_the_bare_role_name() -> None:
     settings = make_settings(supabase_project_ref="")
     assert DbTarget.app(settings).url(settings).username == "clinic_app"
+
+
+def test_test_schema_must_differ_from_the_dev_schema() -> None:
+    with pytest.raises(ValidationError, match="must differ"):
+        make_settings(db_schema="clinic", db_test_schema="clinic")

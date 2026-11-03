@@ -28,7 +28,10 @@ def run_alembic(settings: Settings, *args: str) -> subprocess.CompletedProcess[s
 
 @pytest.fixture(scope="session")
 def settings() -> Settings:
-    return get_settings()
+    settings = get_settings()
+    if settings.env == "production":
+        pytest.exit("Refusing to run integration tests with ENV=production: they truncate the test schema.")
+    return settings
 
 
 @pytest.fixture(scope="session")

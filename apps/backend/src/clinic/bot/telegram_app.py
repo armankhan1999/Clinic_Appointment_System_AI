@@ -1,7 +1,8 @@
 """Telegram adapter (python-telegram-bot, long polling, D-18). No business rules live here."""
 
 import asyncio
-from collections.abc import Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine
+from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
@@ -64,37 +65,90 @@ def to_markup(reply: Reply) -> Markup:
     return None
 
 
+TELEGRAM_MAX_MESSAGE = 4096  # Bot API limit for a text message
+
+
+def split_message(text: str, limit: int = TELEGRAM_MAX_MESSAGE) -> list[str]:
+    """Split on line breaks where possible, hard-splitting any single line longer than the limit."""
+    parts: list[str] = []
+    current = ""
+    for line in text.split("\n"):
+        while len(line) > limit:
+            if current:
+                parts.append(current)
+                current = ""
+            parts.append(line[:limit])
+            line = line[limit:]
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > limit:
+            parts.append(current)
+            current = line
+        else:
+            current = candidate
+    parts.append(current)
+    return parts
+
+
+class UserLocks:
+    """One update at a time per user (consistent registration state and memory) while different users are
+    served concurrently. A lock is dropped once nobody holds or waits for it, so the map stays bounded."""
+
+    def __init__(self) -> None:
+        self._locks: dict[int, tuple[asyncio.Lock, int]] = {}
+
+    @asynccontextmanager
+    async def hold(self, user_id: int) -> AsyncIterator[None]:
+        lock, users = self._locks.get(user_id, (asyncio.Lock(), 0))
+        self._locks[user_id] = (lock, users + 1)
+        try:
+            async with lock:
+                yield
+        finally:
+            lock, users = self._locks[user_id]
+            if users <= 1:
+                del self._locks[user_id]
+            else:
+                self._locks[user_id] = (lock, users - 1)
+
+    def active(self) -> int:
+        return len(self._locks)
+
+
+type Sender = Callable[..., Coroutine[Any, Any, object]]
+
+
+async def _send(send: Sender, reply: Reply) -> None:
+    chunks = split_message(reply.text)
+    for index, chunk in enumerate(chunks):
+        await send(chunk, reply_markup=to_markup(reply) if index == len(chunks) - 1 else None)
+
+
 class TelegramAdapter:
     def __init__(self, conversation: ConversationService) -> None:
         self._conversation = conversation
-        # One update at a time per user keeps registration state and memory consistent, while
-        # different users are served concurrently.
-        self._locks: dict[int, asyncio.Lock] = {}
-
-    def _lock(self, user_id: int) -> asyncio.Lock:
-        return self._locks.setdefault(user_id, asyncio.Lock())
+        self._locks = UserLocks()
 
     async def on_text(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         message, user = update.effective_message, update.effective_user
         if message is None or user is None or message.text is None:
             return
-        async with self._lock(user.id):
+        async with self._locks.hold(user.id):
             replies = await self._conversation.handle_text(IncomingUser(user.id), message.text)
         for reply in replies:
-            await message.reply_text(reply.text, reply_markup=to_markup(reply))
+            await _send(message.reply_text, reply)
 
     async def on_contact(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         message, user = update.effective_message, update.effective_user
         if message is None or user is None or message.contact is None:
             return
-        async with self._lock(user.id):
+        async with self._locks.hold(user.id):
             replies = await self._conversation.handle_contact(
                 IncomingUser(user.id),
                 contact_user_id=message.contact.user_id,
                 phone=message.contact.phone_number,
             )
         for reply in replies:
-            await message.reply_text(reply.text, reply_markup=to_markup(reply))
+            await _send(message.reply_text, reply)
 
     async def on_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -106,12 +160,16 @@ class TelegramAdapter:
             await query.edit_message_reply_markup(reply_markup=None)  # one tap per button set
         except BadRequest as exc:
             log.info("callback_markup_not_removed", error=exc.message)
-        async with self._lock(query.from_user.id):
+        async with self._locks.hold(query.from_user.id):
             replies = await self._conversation.handle_callback(
                 IncomingUser(query.from_user.id), query.data or ""
             )
+
+        async def send(text: str, reply_markup: Markup = None) -> object:
+            return await context.bot.send_message(chat.id, text, reply_markup=reply_markup)
+
         for reply in replies:
-            await context.bot.send_message(chat.id, reply.text, reply_markup=to_markup(reply))
+            await _send(send, reply)
 
     async def on_error(self, _: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         if context.error is not None:

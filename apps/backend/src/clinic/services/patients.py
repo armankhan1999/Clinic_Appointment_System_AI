@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.db.models import Patient
+from clinic.db.models import Appointment, Patient
 from clinic.domain.patients import first_name
 from clinic.services.audit import AuditService
 from clinic.services.tickets import TicketService
@@ -164,3 +164,46 @@ class PatientService:
                 patient_id=owner.id,
                 latency_ms=None,
             )
+
+    async def delete_patient(self, patient_id: UUID, *, now: datetime) -> int:
+        """E1-S4-AC2: cancel upcoming appointments, anonymise, set deleted_at. Returns the cancelled count."""
+        async with self._session_factory() as session, session.begin():
+            patient = await session.scalar(
+                select(Patient)
+                .where(Patient.id == patient_id, Patient.deleted_at.is_(None))
+                .with_for_update()
+            )
+            if patient is None:
+                return 0
+            upcoming = (
+                await session.scalars(
+                    select(Appointment)
+                    .where(
+                        Appointment.patient_id == patient_id,
+                        Appointment.status == "booked",
+                        Appointment.start_time > now,
+                    )
+                    .with_for_update()
+                )
+            ).all()
+            for appointment in upcoming:
+                appointment.status = "cancelled"
+                appointment.cancelled_at = now
+                appointment.cancelled_by_kind = "patient"
+                appointment.cancel_reason = "Patient deleted their data"
+            # GAP-25: Telegram ID cleared too, so the sender is treated as a new user (E1-S4-AC3).
+            patient.full_name = "Deleted patient"
+            patient.phone = None
+            patient.telegram_user_id = None
+            patient.deleted_at = now
+            AuditService.record(
+                session,
+                actor_type="patient_button",
+                actor_id=None,
+                action="patient.delete",
+                args={"cancelled_appointments": len(upcoming)},
+                result="OK",
+                patient_id=patient_id,
+                latency_ms=None,
+            )
+            return len(upcoming)

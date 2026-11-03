@@ -46,7 +46,9 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "S", "SIM", "RUF", "ASYNC", "PT", "TRY", "DTZ", "LOG", "G"]
-ignore = ["TRY003"]
+# TRY400 (prefer logging.exception) is off on purpose: tracebacks carry exception messages and SQL
+# parameters that can hold personal data. Errors are logged with clinic.observability.safe_exception_fields.
+ignore = ["TRY003", "TRY400"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["clinic", "seed"]

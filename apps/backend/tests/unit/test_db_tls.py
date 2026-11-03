@@ -48,3 +48,14 @@ def test_tls_can_be_disabled_for_a_local_ci_database() -> None:
 def test_disabling_tls_is_refused_in_production(ca_file: Path) -> None:
     with pytest.raises(InsecureDatabaseTlsError, match="DB_SSL=disable"):
         database_ssl(make_settings(env="production", db_ssl="disable", db_ssl_root_cert=ca_file))
+
+
+def test_driver_timeouts_bound_every_connection_and_command() -> None:
+    from clinic.config import DbTarget
+    from clinic.db.session import connect_args
+
+    settings = make_settings(env="test", db_ssl="disable")
+    args = connect_args(DbTarget.test(settings), settings)
+    assert args["timeout"] == 10
+    assert args["command_timeout"] == 15, "longer than the role statement_timeout (10 s)"
+    assert args["server_settings"] == {"application_name": "clinic-clinic_test_app"}
