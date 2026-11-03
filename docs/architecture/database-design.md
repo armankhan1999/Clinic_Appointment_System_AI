@@ -136,3 +136,10 @@ Single row (`id smallint PK CHECK (id = 1)`): `clinic_name`, `phone`, `address`,
 - Every Alembic revision has a working `downgrade()`; CI runs `upgrade head → downgrade base → upgrade head` against an empty Postgres.
 - The seed (`scripts/seed`) is separate from migrations and runs only against dev and test databases. It creates 3 doctors, weekly schedules, FAQ entries, synthetic patients and 2 weeks of synthetic appointments (E7-S1-AC3, GAP-16).
 - Tests run in schema `clinic_test` as role `clinic_test_app`, which has no rights on `clinic` (D-17). Table definitions carry no hard-coded schema; the schema is mapped at runtime with SQLAlchemy's `schema_translate_map`, so one model set serves both schemas.
+
+## Implementation notes (M1, verified 2026-11-03)
+
+- Baseline revision `apps/backend/migrations/versions/0001_baseline.py` applied to `clinic` and `clinic_test`; `alembic current` → `0001 (head)`. Up/down/up is covered by `tests/integration/test_migrations.py`.
+- `appointments.ref` uses `format_appointment_ref(nextval('appointment_ref_seq'))`, which pads to 6 digits and keeps growing (`APT-1234567`) instead of truncating.
+- Supabase security advisor after the migration: 0 lints. Performance advisor: INFO only. "Unused index" is expected on an empty schema. "Unindexed foreign keys" lists the staff provenance columns (`updated_by`, `created_by`, `resolved_by`, `acknowledged_by`, `attendance_marked_by`, `created_by_staff_id`), `appointments.rescheduled_from`, `emergency_alerts.patient_id` and `notifications.patient_id`. Those indexes only speed up deletes or updates of the referenced row. Staff users are deactivated, never deleted; patients are anonymised, never deleted (E1-S4). They are therefore not added. Revisit if a query starts filtering on one of these columns.
+- Driver: asyncpg (D-25). Raw SQL text is not affected by `schema_translate_map`, so application code uses SQLAlchemy constructs; tests that need raw SQL qualify the schema explicitly.
