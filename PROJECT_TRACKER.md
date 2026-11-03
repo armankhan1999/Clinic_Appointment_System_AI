@@ -67,6 +67,8 @@ Open risk R-LAT-01: the Supabase project is in `eu-west-3` (Paris) while the cli
 
 Open risk R-DB-TLS: certificate verification is implemented (D-26) but dev runs unverified until `DB_SSL_ROOT_CERT` points to the official `prod-ca-2021.crt` from the dashboard.
 
+Open risk R-GEM-02: Gemini free-tier latency spikes. Measured 2026-11-03 ~19:40 IST: `gemini-3.5-flash-lite` took 15–40 s per call (no tools, 19 output tokens, no thinking tokens), `gemini-3.8-flash` returned 503 'high demand'; earlier the same day calls took 1.3–3.8 s. The bot falls back to the clinic phone within the 8 s budget, so patients are never left without a reply, but bookings cannot proceed during a spike. Mitigation: paid tier for any pilot (also required by D-16), retry the live journey, and track p95 in the evaluation suite.
+
 Open risk R-GEM-01: Gemini free-tier quotas are shown only in AI Studio. Unofficial reports suggest daily request limits low enough that one 35-scenario eval run may not fit in a day (not verified). Mitigation: check limits; use flash-lite; enable paid billing for eval runs if needed.
 
 ## Session handoff — 2026-11-02
