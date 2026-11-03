@@ -247,3 +247,28 @@ async def test_reference_is_available_right_after_flush(session_factory: Factory
         patient = await make_patient(session)
         appointment = await make_appointment(session, doctor=doctor, patient=patient, start=future_slot())
         assert appointment.ref == "APT-000001"
+
+
+async def test_deleted_patient_must_be_anonymised(session_factory: Factory) -> None:
+    async with session_factory() as session:
+        session.add(
+            Patient(
+                registered_via="bot",
+                full_name="Deleted patient",
+                phone="+12025550199",
+                deleted_at=datetime.now(UTC),
+            )
+        )
+        with pytest.raises(IntegrityError, match="ck_patients_deleted_anonymised"):
+            await session.flush()
+    async with session_factory() as session:
+        session.add(
+            Patient(
+                registered_via="bot",
+                full_name="Deleted patient",
+                telegram_user_id=5,
+                deleted_at=datetime.now(UTC),
+            )
+        )
+        with pytest.raises(IntegrityError, match="ck_patients_deleted_anonymised"):
+            await session.flush()

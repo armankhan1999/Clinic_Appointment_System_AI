@@ -91,7 +91,9 @@ class PatientService:
 
     async def check_phone(self, phone: str, *, telegram_user_id: int) -> PhoneCheck:
         async with self._session_factory() as session:
-            owner = await session.scalar(select(Patient).where(Patient.phone == phone))
+            owner = await session.scalar(
+                select(Patient).where(Patient.phone == phone, Patient.deleted_at.is_(None))
+            )
         return _phone_check(owner, telegram_user_id)
 
     async def register_from_telegram(
@@ -115,7 +117,9 @@ class PatientService:
             )
             if mine is not None:
                 return RegistrationResult(RegistrationOutcome.ALREADY_REGISTERED, _view(mine))
-            owner = await session.scalar(select(Patient).where(Patient.phone == phone).with_for_update())
+            owner = await session.scalar(
+                select(Patient).where(Patient.phone == phone, Patient.deleted_at.is_(None)).with_for_update()
+            )
             if owner is not None and _phone_check(owner, telegram_user_id) is PhoneCheck.LINKED_ELSEWHERE:
                 await TicketService.open_or_get(session, patient_id=owner.id, reason="registration_conflict")
                 _audit(session, owner.id, RegistrationOutcome.LINKED_ELSEWHERE)

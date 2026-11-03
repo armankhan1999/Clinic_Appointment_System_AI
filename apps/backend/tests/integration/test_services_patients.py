@@ -104,9 +104,23 @@ async def test_same_telegram_user_registering_again_gets_existing_record(session
         assert len((await session.scalars(select(Patient))).all()) == 1
 
 
-async def test_deleted_patient_is_not_found_by_telegram_id(session_factory: Factory) -> None:
+async def test_deleted_patient_is_treated_as_unknown(session_factory: Factory) -> None:
     async with session_factory() as session:
-        patient = await make_patient(session, telegram_user_id=111)
-        patient.deleted_at = datetime.now(UTC)
+        patient = await make_patient(session, telegram_user_id=111, phone=PHONE)
         await session.commit()
-    assert await PatientService(session_factory).get_by_telegram(111) is None
+    async with session_factory() as session:
+        stored = await session.get_one(Patient, patient.id)
+        stored.deleted_at = datetime.now(UTC)
+        stored.phone = None
+        stored.telegram_user_id = None
+        stored.full_name = "Deleted patient"
+        await session.commit()
+    service = PatientService(session_factory)
+    assert await service.get_by_telegram(111) is None
+    assert await service.check_phone(PHONE, telegram_user_id=111) == PhoneCheck.AVAILABLE
+    result = await service.register_from_telegram(
+        telegram_user_id=111, phone=PHONE, full_name="Asha Rao", consented_at=CONSENT
+    )
+    assert result.outcome == RegistrationOutcome.REGISTERED
+    assert result.patient is not None
+    assert result.patient.id != patient.id, "a deleted record must never be reactivated"
