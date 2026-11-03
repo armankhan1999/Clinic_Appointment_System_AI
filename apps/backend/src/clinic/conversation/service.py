@@ -425,6 +425,11 @@ class ConversationService:
     def _outcome_reply(outcome: AgentOutcome, view: ClinicSettingsView) -> Reply:
         if outcome.stopped == "reply" and outcome.text:
             return Reply(outcome.text)
+        if outcome.stopped == "ungrounded":
+            return Reply(
+                "Sorry, I couldn't confirm that information. Please ask me again, "
+                f"or call the clinic on {view.phone}."
+            )
         if outcome.stopped == "limit":
             return Reply(
                 f"Sorry, I couldn't complete that. Please try rephrasing, or call the clinic on {view.phone}."

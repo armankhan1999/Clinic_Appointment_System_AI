@@ -13,6 +13,7 @@ import structlog
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from clinic.agent.grounding import is_grounded, sources_from
 from clinic.agent.llm import LLM, LlmTurn, LlmUnavailableError, ModelTurn, ToolCall, ToolResults, UserText
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.tools import ToolContext, ToolRegistry, ToolResult
@@ -22,7 +23,7 @@ from clinic.services.audit import AuditService
 
 log = structlog.get_logger(__name__)
 
-type StopReason = Literal["reply", "limit", "llm_error"]
+type StopReason = Literal["reply", "limit", "llm_error", "ungrounded"]
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,10 @@ class AgentLoop:
                 if not text:
                     log.warning("agent_empty_reply")
                     return AgentOutcome(None, "llm_error", calls_made, tuple(results_seen))
+                if not is_grounded(text, sources_from(memory.history(user_key) + exchange)):
+                    # E2-S2-AC4: a time or fee with no tool evidence is never sent or remembered.
+                    log.warning("grounding_failed", tool_calls=calls_made)
+                    return AgentOutcome(None, "ungrounded", calls_made, tuple(results_seen))
                 memory.append(user_key, exchange)
                 return AgentOutcome(text, "reply", calls_made, tuple(results_seen))
             results: list[tuple[ToolCall, ToolResult]] = []
