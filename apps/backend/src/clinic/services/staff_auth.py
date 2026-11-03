@@ -2,7 +2,9 @@
 
 - Passwords are argon2id hashes; hashing runs in a worker thread so the event loop never blocks.
 - Unknown usernames are verified against a dummy hash, so timing and messages do not reveal accounts.
-- 5 failures within 15 minutes lock the account for 15 minutes (E6-S1-AC3, GAP-23).
+- 5 failures within 15 minutes lock the account for 15 minutes (E6-S1-AC3, GAP-23). Unknown usernames
+  get the same in-memory lockout and every path does the same hashing work, so neither the 423 nor the
+  response time reveals whether an account exists.
 - Sessions are opaque random tokens; only their SHA-256 is stored. 12 h absolute, 60 min idle.
 - The CSRF token is an HMAC of the session token, so it is bound to the session and needs no storage.
 """
@@ -49,6 +51,23 @@ class WeakPasswordError(ValueError):
 
 class InvalidUsernameError(ValueError):
     """Usernames are 3-40 characters: lower-case letters, digits, dot, underscore, hyphen."""
+
+
+@dataclass
+class _Failures:
+    count: int = 0
+    first_at: datetime | None = None
+    locked_until: datetime | None = None
+
+
+def _register_failure(state: _Failures, now: datetime) -> None:
+    if state.first_at is None or now - state.first_at > FAILURE_WINDOW:
+        state.first_at, state.count = now, 1
+    else:
+        state.count += 1
+    if state.count >= LOCK_AFTER_FAILURES:
+        state.locked_until = now + LOCK_DURATION
+        state.count, state.first_at = 0, None
 
 
 @dataclass(frozen=True)
@@ -111,6 +130,7 @@ class StaffAuthService:
     ) -> None:
         self._session_factory = session_factory
         self._clock = clock
+        self._unknown: dict[str, _Failures] = {}  # lockout state for usernames that do not exist
 
     async def create_user(
         self, *, username: str, display_name: str, role: Role, password: str, actor_id: UUID | None
@@ -136,20 +156,17 @@ class StaffAuthService:
                 .with_for_update()
             )
             if user is None or not user.active:
-                await _verify(_DUMMY_HASH, password)  # same work as a real check
-                self._audit(session, None, "staff.login", {}, ResultCode.UNAUTHENTICATED)
-                return LoginResult(ResultCode.UNAUTHENTICATED)
+                return await self._unknown_login(session, username, password, now)
             if user.locked_until is not None and user.locked_until > now:
+                await _verify(user.password_hash, password)  # same work as an unlocked attempt
                 self._audit(session, user.id, "staff.login", {}, ResultCode.ACCOUNT_LOCKED)
                 return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=user.locked_until)
             if not await _verify(user.password_hash, password):
-                if user.first_failed_at is None or now - user.first_failed_at > FAILURE_WINDOW:
-                    user.first_failed_at, user.failed_attempts = now, 1
-                else:
-                    user.failed_attempts += 1
-                if user.failed_attempts >= LOCK_AFTER_FAILURES:
-                    user.locked_until = now + LOCK_DURATION
-                    user.failed_attempts, user.first_failed_at = 0, None
+                state = _Failures(user.failed_attempts, user.first_failed_at, None)
+                _register_failure(state, now)
+                user.failed_attempts, user.first_failed_at = state.count, state.first_at
+                if state.locked_until is not None:
+                    user.locked_until = state.locked_until
                     self._audit(session, user.id, "staff.lockout", {}, ResultCode.ACCOUNT_LOCKED)
                 self._audit(session, user.id, "staff.login", {}, ResultCode.UNAUTHENTICATED)
                 return LoginResult(ResultCode.UNAUTHENTICATED)
@@ -168,6 +185,25 @@ class StaffAuthService:
             await session.flush()
             self._audit(session, user.id, "staff.login", {}, ResultCode.OK)
             return LoginResult(ResultCode.OK, _principal(user, staff_session.id), token)
+
+    async def _unknown_login(
+        self, session: AsyncSession, username: str, password: str, now: datetime
+    ) -> LoginResult:
+        """Behaves exactly like a real account with a wrong password, lockout included."""
+        await _verify(_DUMMY_HASH, password)
+        for name in [
+            n for n, s in self._unknown.items() if s.first_at is None and (s.locked_until or now) <= now
+        ]:
+            del self._unknown[name]  # bounded: idle entries are dropped
+        key = username.strip().lower()
+        state = self._unknown.setdefault(key, _Failures())
+        if state.locked_until is not None and state.locked_until > now:
+            self._audit(session, None, "staff.login", {}, ResultCode.ACCOUNT_LOCKED)
+            return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=state.locked_until)
+        state.locked_until = None
+        _register_failure(state, now)
+        self._audit(session, None, "staff.login", {}, ResultCode.UNAUTHENTICATED)
+        return LoginResult(ResultCode.UNAUTHENTICATED)
 
     async def authenticate(self, token: str) -> StaffPrincipal | None:
         now = self._clock()

@@ -136,3 +136,16 @@ def test_csrf_token_is_bound_to_the_session_token() -> None:
     assert csrf_token_for("a" * 43) == csrf_token_for("a" * 43)
     assert csrf_token_for("a" * 43) != csrf_token_for("b" * 43)
     assert len(csrf_token_for("a" * 43)) == 64
+
+
+async def test_unknown_usernames_lock_exactly_like_real_ones(session_factory: Factory) -> None:
+    """No enumeration oracle: a 423 after five failures must not reveal that an account exists."""
+    clock = Clock()
+    service = await _service(session_factory, clock)
+    real, ghost = [], []
+    for _ in range(6):
+        real.append((await service.login("riya", "wrong password")).code)
+        ghost.append((await service.login("nobody-here", "wrong password")).code)
+    assert real == ghost == [ResultCode.UNAUTHENTICATED] * 5 + [ResultCode.ACCOUNT_LOCKED]
+    clock.now += timedelta(minutes=16)
+    assert (await service.login("nobody-here", "wrong password")).code == ResultCode.UNAUTHENTICATED
