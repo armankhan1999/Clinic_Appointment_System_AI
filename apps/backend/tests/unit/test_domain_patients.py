@@ -23,7 +23,7 @@ def test_invalid_names_are_rejected(raw: str) -> None:
         ("  asha   rao ", "asha rao"),
         ("Anne-Marie O'Neil", "Anne-Marie O'Neil"),
         ("Jo", "Jo"),
-        ("Priya DN{RIGHT SINGLE QUOTATION MARK}Souza", "Priya DN{RIGHT SINGLE QUOTATION MARK}Souza"),
+        ("Priya D\N{RIGHT SINGLE QUOTATION MARK}Souza", "Priya D\N{RIGHT SINGLE QUOTATION MARK}Souza"),
         ("a" * 60, "a" * 60),
         ("Zoë Ångström", "Zoë Ångström"),
     ],
