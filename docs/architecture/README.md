@@ -1,6 +1,6 @@
 # Architecture — Design Spec (for approval)
 
-Status: **DRAFT, awaiting approval** (2026-11-02). Nothing is scaffolded until this is approved.
+Status: **APPROVED** by Arman on 2026-11-03 (D-22). Implementation plans live in `docs/superpowers/plans/`.
 
 | Document | Contents |
 |---|---|
@@ -16,7 +16,7 @@ Patients chat with a Telegram bot. Each message passes deterministic guardrails 
 
 ## Dependencies to be added (approval of this spec approves these)
 
-Backend (uv, pinned in `uv.lock`): fastapi, uvicorn, pydantic, pydantic-settings, sqlalchemy[asyncio], psycopg[binary], alembic, python-telegram-bot[job-queue], google-genai, argon2-cffi, structlog, phonenumbers (E.164 normalisation). Dev: pytest, pytest-asyncio, httpx, ruff, mypy, pip-audit.
+Backend (uv, pinned in `uv.lock`): fastapi, uvicorn, pydantic, pydantic-settings, sqlalchemy[asyncio], asyncpg (D-25, replaces psycopg[binary]), alembic, python-telegram-bot[job-queue], google-genai, argon2-cffi, structlog, phonenumbers (E.164 normalisation). Dev: pytest, pytest-asyncio, httpx, ruff, mypy, pip-audit.
 Web (npm, pinned in `package-lock.json`): next, react, react-dom, typescript, tailwindcss, shadcn/ui components (Radix-based, copied into the repo), lucide-react, @tanstack/react-query, react-hook-form, zod, @hookform/resolvers, date-fns-tz or Intl (decided at implementation). Dev: eslint, vitest, @testing-library/react, @playwright/test.
 `phonenumbers` and the date library are the only choices beyond the stack you named; versions are checked for maintenance and advisories when added.
 
