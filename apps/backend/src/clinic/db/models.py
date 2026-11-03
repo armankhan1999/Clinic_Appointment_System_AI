@@ -316,3 +316,16 @@ class AuditLog(Base):
     result: Mapped[str]
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     request_id: Mapped[str | None]
+
+
+class LoginFailure(Base):
+    """Lockout state for staff usernames that do not exist, keyed by a hash (migration 0003)."""
+
+    __tablename__ = "login_failures"
+    __table_args__ = (Index("ix_login_failures_updated_at", "updated_at"),)
+
+    username_hash: Mapped[bytes] = mapped_column(primary_key=True)
+    failed_attempts: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
+    first_failed_at: Mapped[datetime | None]
+    locked_until: Mapped[datetime | None]
+    updated_at: Mapped[datetime] = mapped_column(server_default=func.now())

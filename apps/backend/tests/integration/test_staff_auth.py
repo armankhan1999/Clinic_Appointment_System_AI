@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.db.models import AuditLog, StaffSession, StaffUser
+from clinic.db.models import AuditLog, LoginFailure, StaffSession, StaffUser
 from clinic.domain.results import ResultCode
 from clinic.services.staff_auth import Role, StaffAuthService, WeakPasswordError, csrf_token_for
 
@@ -149,3 +149,30 @@ async def test_unknown_usernames_lock_exactly_like_real_ones(session_factory: Fa
     assert real == ghost == [ResultCode.UNAUTHENTICATED] * 5 + [ResultCode.ACCOUNT_LOCKED]
     clock.now += timedelta(minutes=16)
     assert (await service.login("nobody-here", "wrong password")).code == ResultCode.UNAUTHENTICATED
+
+
+async def test_unknown_username_lockout_survives_a_restart_like_a_real_one(session_factory: Factory) -> None:
+    clock = Clock()
+    first = await _service(session_factory, clock)
+    for _ in range(5):
+        await first.login("riya", "wrong password")
+        await first.login("nobody-here", "wrong password")
+    restarted = StaffAuthService(session_factory, clock=clock)  # a new process, or a second API instance
+    assert (await restarted.login("riya", "wrong password")).code == ResultCode.ACCOUNT_LOCKED
+    assert (await restarted.login("nobody-here", "wrong password")).code == ResultCode.ACCOUNT_LOCKED
+
+
+async def test_unknown_usernames_are_stored_only_as_hashes(session_factory: Factory) -> None:
+    service = await _service(session_factory, Clock())
+    await service.login("secret-name", "wrong password")
+    async with session_factory() as session:
+        stored = (await session.scalars(select(LoginFailure))).all()
+    assert len(stored) == 1
+    assert b"secret-name" not in stored[0].username_hash
+
+
+async def test_overlong_usernames_are_refused_without_storing_anything(session_factory: Factory) -> None:
+    service = await _service(session_factory, Clock())
+    assert (await service.login("x" * 500, "wrong password")).code == ResultCode.UNAUTHENTICATED
+    async with session_factory() as session:
+        assert (await session.scalars(select(LoginFailure))).all() == []

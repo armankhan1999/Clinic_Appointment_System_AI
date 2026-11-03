@@ -31,7 +31,7 @@ from .factories import future_slot, make_appointment, make_doctor, make_patient
 EXPECTED_TABLES = {
     "clinic_settings", "staff_users", "staff_sessions", "doctors", "doctor_schedules", "doctor_leaves",
     "patients", "appointments", "reminders", "notifications", "handoff_tickets", "emergency_alerts",
-    "clinic_info", "audit_log",
+    "clinic_info", "audit_log", "login_failures",
 }  # fmt: skip
 
 Factory = async_sessionmaker[AsyncSession]

@@ -3,8 +3,8 @@
 - Passwords are argon2id hashes; hashing runs in a worker thread so the event loop never blocks.
 - Unknown usernames are verified against a dummy hash, so timing and messages do not reveal accounts.
 - 5 failures within 15 minutes lock the account for 15 minutes (E6-S1-AC3, GAP-23). Unknown usernames
-  get the same in-memory lockout and every path does the same hashing work, so neither the 423 nor the
-  response time reveals whether an account exists.
+  get the same lockout, stored in the database like real accounts' (keyed by a hash of the name), and
+  every path does the same hashing work, so neither the 423 nor the timing reveals an account.
 - Sessions are opaque random tokens; only their SHA-256 is stored. 12 h absolute, 60 min idle.
 - The CSRF token is an HMAC of the session token, so it is bound to the session and needs no storage.
 """
@@ -22,10 +22,11 @@ from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.db.models import StaffSession, StaffUser
+from clinic.db.models import LoginFailure, StaffSession, StaffUser
 from clinic.domain.results import ResultCode
 from clinic.services.audit import AuditService
 from clinic.services.availability import utc_now
@@ -40,6 +41,8 @@ FAILURE_WINDOW = timedelta(minutes=15)
 LOCK_DURATION = timedelta(minutes=15)
 MIN_PASSWORD_LENGTH = 12
 USERNAME_PATTERN = re.compile(r"^[a-z0-9._-]{3,40}$")
+MAX_USERNAME_LENGTH = 80
+FAILURE_RETENTION = timedelta(days=1)  # unknown-username rows older than this are purged
 
 _hasher = PasswordHasher()  # argon2id with the library's current recommended parameters
 _DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(16))
@@ -130,7 +133,6 @@ class StaffAuthService:
     ) -> None:
         self._session_factory = session_factory
         self._clock = clock
-        self._unknown: dict[str, _Failures] = {}  # lockout state for usernames that do not exist
 
     async def create_user(
         self, *, username: str, display_name: str, role: Role, password: str, actor_id: UUID | None
@@ -191,17 +193,28 @@ class StaffAuthService:
     ) -> LoginResult:
         """Behaves exactly like a real account with a wrong password, lockout included."""
         await _verify(_DUMMY_HASH, password)
-        for name in [
-            n for n, s in self._unknown.items() if s.first_at is None and (s.locked_until or now) <= now
-        ]:
-            del self._unknown[name]  # bounded: idle entries are dropped
         key = username.strip().lower()
-        state = self._unknown.setdefault(key, _Failures())
-        if state.locked_until is not None and state.locked_until > now:
+        if not key or len(key) > MAX_USERNAME_LENGTH:
+            return LoginResult(ResultCode.UNAUTHENTICATED)  # cannot be a real username: nothing to track
+        username_hash = hashlib.sha256(key.encode()).digest()
+        await session.execute(
+            insert(LoginFailure)
+            .values(username_hash=username_hash)
+            .on_conflict_do_nothing(index_elements=["username_hash"])
+        )
+        row = await session.get_one(LoginFailure, username_hash, with_for_update=True)
+        row.updated_at = now
+        if row.locked_until is not None and row.locked_until > now:
             self._audit(session, None, "staff.login", {}, ResultCode.ACCOUNT_LOCKED)
-            return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=state.locked_until)
-        state.locked_until = None
+            return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=row.locked_until)
+        state = _Failures(row.failed_attempts, row.first_failed_at, None)
         _register_failure(state, now)
+        row.failed_attempts, row.first_failed_at, row.locked_until = (
+            state.count,
+            state.first_at,
+            state.locked_until,
+        )
+        await session.execute(delete(LoginFailure).where(LoginFailure.updated_at < now - FAILURE_RETENTION))
         self._audit(session, None, "staff.login", {}, ResultCode.UNAUTHENTICATED)
         return LoginResult(ResultCode.UNAUTHENTICATED)
 
