@@ -52,3 +52,7 @@ Method: STRIDE per trust boundary, plus LLM-specific threats (OWASP Top 10 for L
 - In-memory conversation state is lost on restart (by design, NFR-07): pending confirmations expire.
 - Reminder sending is at-least-once if the process crashes between Telegram accepting a message and the DB update. The window is milliseconds, and the restart test covers normal restarts.
 - On the free tier, whatever a tester types is sent to Google under unpaid-service terms, even though our code adds no identity. Acceptable only with synthetic personas; this is stated in the README and the welcome notice.
+
+## Update 2026-11-03: database TLS verification (T-DB-TLS)
+
+Finding (automated security review of commit f4f95c8): `ssl="require"` encrypts but does not verify the server, so an on-path attacker could impersonate the pooler. Control: `clinic.db.session.database_ssl` uses verify-full (CA + hostname, TLS ≥ 1.2) when `DB_SSL_ROOT_CERT` is set, and **refuses to start in production without it**. Verified 2026-11-03 against `aws-1-eu-west-3.pooler.supabase.com`: the pooler presents `*.pooler.supabase.com` signed by *Supabase Intermediate 2021 CA* → *Supabase Root 2021 CA* (server-presented root SHA-256 `80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA`); verification succeeds with that root and fails with an unrelated CA. Residual: dev/test fall back to `require` (with a warning) until the official `prod-ca-2021.crt` is downloaded from the dashboard and its fingerprint compared.

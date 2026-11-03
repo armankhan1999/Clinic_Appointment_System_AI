@@ -96,6 +96,11 @@ def check_db(env: dict[str, str]) -> bool:
         return False
     import psycopg
 
+    root_cert = env.get("DB_SSL_ROOT_CERT")
+    if root_cert and not Path(root_cert).is_absolute():
+        root_cert = str(ENV_PATH.parent / root_cert)
+    tls = {"sslmode": "verify-full", "sslrootcert": root_cert} if root_cert else {"sslmode": "require"}
+    print(f"  TLS mode: {tls['sslmode']}" + ("" if root_cert else " (set DB_SSL_ROOT_CERT for verify-full)"))
     schemas = {env.get("DB_SCHEMA", ""), env.get("DB_TEST_SCHEMA", "")}
     ok = True
     for role, password_key, schema_key in DB_ROLES:
@@ -105,10 +110,10 @@ def check_db(env: dict[str, str]) -> bool:
             with psycopg.connect(
                 host=env["DB_HOST"], port=int(env.get("DB_PORT", "5432")), dbname=env.get("DB_NAME", "postgres"),
                 user=f"{role}.{env['SUPABASE_PROJECT_REF']}", password=env[password_key],
-                sslmode="require", connect_timeout=10, prepare_threshold=None,
+                connect_timeout=10, prepare_threshold=None, **tls,
             ) as conn:
                 # Client-side TLS state; pg_stat_ssl would describe the pooler-to-Postgres hop instead.
-                tls = conn.pgconn.ssl_in_use
+                tls_in_use = conn.pgconn.ssl_in_use
                 version, user = conn.execute("select current_setting('server_version'), current_user").fetchone()
                 rights = conn.execute(
                     "select has_schema_privilege(current_user, %s, 'USAGE'), "
@@ -119,11 +124,11 @@ def check_db(env: dict[str, str]) -> bool:
             print(f"  [FAIL] {role}: {type(exc).__name__}: {scrub(str(exc), env)[:300]}")
             ok = False
             continue
-        if not tls or not rights[0] or leaks:
-            print(f"  [FAIL] {role}: TLS={tls}; usage on '{schema}'={rights[0]}; unexpected access to {leaks}")
+        if not tls_in_use or not rights[0] or leaks:
+            print(f"  [FAIL] {role}: TLS={tls_in_use}; usage on '{schema}'={rights[0]}; unexpected access to {leaks}")
             ok = False
             continue
-        print(f"  [PASS] {role}: logged in as {user}; Postgres {version}; client TLS={tls}; "
+        print(f"  [PASS] {role}: logged in as {user}; Postgres {version}; client TLS={tls_in_use}; "
               f"schema '{schema}' usage={rights[0]} create={rights[1]}; no access to {other_schemas or 'n/a'}")
     return ok
 

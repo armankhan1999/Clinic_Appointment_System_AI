@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import SecretStr, field_validator
+from pydantic import FilePath, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     db_test_app_password: SecretStr
     db_schema: str = "clinic"
     db_test_schema: str = "clinic_test"
+    # Supabase CA (prod-ca-2021.crt from Database Settings > SSL Configuration). Enables verify-full.
+    db_ssl_root_cert: FilePath | None = None
 
     telegram_bot_token: SecretStr
     gemini_api_key: SecretStr

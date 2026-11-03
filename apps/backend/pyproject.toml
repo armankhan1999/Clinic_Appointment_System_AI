@@ -58,7 +58,8 @@ known-first-party = ["clinic", "seed"]
 python_version = "3.14"
 strict = true
 plugins = ["pydantic.mypy"]
-mypy_path = "src"
+mypy_path = ["src", "scripts"]
+files = ["src", "tests", "migrations", "scripts"]
 
 [dependency-groups]
 dev = [
