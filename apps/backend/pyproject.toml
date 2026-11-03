@@ -27,6 +27,7 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
@@ -46,6 +47,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "S", "SIM", "RUF", "ASYNC", "PT", "TRY", "DTZ", "LOG", "G"]
 ignore = ["TRY003"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["clinic", "seed"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106"]
