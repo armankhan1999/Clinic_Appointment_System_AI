@@ -111,3 +111,10 @@ def test_app_role_for_schema() -> None:
     assert DbTarget.app_role_for_schema(settings, "clinic_test") == "clinic_test_app"
     with pytest.raises(ValueError, match="other"):
         DbTarget.app_role_for_schema(settings, "other")
+
+
+def test_api_port_defaults_to_8000_and_is_validated() -> None:
+    assert make_settings().api_port == 8000
+    assert make_settings(api_port=8010).api_port == 8010
+    with pytest.raises(ValidationError, match="api_port"):
+        make_settings(api_port=80)

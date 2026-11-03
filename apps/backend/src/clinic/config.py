@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import FilePath, SecretStr, field_validator
+from pydantic import Field, FilePath, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     clinic_timezone: str
     log_level: str = "INFO"
+
+    # The staff API binds to 127.0.0.1 only; the dashboard reaches it through a same-origin rewrite.
+    api_port: int = Field(default=8000, ge=1024, le=65535)
 
     @field_validator("clinic_timezone")
     @classmethod
