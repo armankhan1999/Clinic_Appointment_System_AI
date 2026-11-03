@@ -38,6 +38,7 @@ jobs:
       TELEGRAM_BOT_TOKEN: "0:ci-placeholder-not-a-token"
       GEMINI_API_KEY: ci-placeholder-not-a-key
       GEMINI_MODEL: gemini-3.5-flash-lite
+      AUTH_SECRET: ci-placeholder-auth-secret-at-least-32-characters
       CLINIC_TIMEZONE: Asia/Kolkata
       PGPASSWORD: postgres
     defaults:

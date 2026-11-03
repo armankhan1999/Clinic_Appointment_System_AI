@@ -3,7 +3,8 @@
 - Passwords are argon2id hashes; hashing runs in a worker thread so the event loop never blocks.
 - Unknown usernames are verified against a dummy hash, so timing and messages do not reveal accounts.
 - 5 failures within 15 minutes lock the account for 15 minutes (E6-S1-AC3, GAP-23). Unknown usernames
-  get the same lockout, stored in the database like real accounts' (keyed by a hash of the name), and
+  get the same lockout, stored in the database like real accounts' (keyed by an HMAC of the name with
+  a server secret, so database readers cannot test guesses, such as a password typed as a name), and
   every path does the same hashing work, so neither the 423 nor the timing reveals an account.
 - Sessions are opaque random tokens; only their SHA-256 is stored. 12 h absolute, 60 min idle.
 - The CSRF token is an HMAC of the session token, so it is bound to the session and needs no storage.
@@ -20,16 +21,21 @@ from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
+import structlog
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from clinic.db.models import LoginFailure, StaffSession, StaffUser
 from clinic.domain.results import ResultCode
+from clinic.observability import safe_exception_fields
 from clinic.services.audit import AuditService
 from clinic.services.availability import utc_now
+
+log = structlog.get_logger(__name__)
 
 type Role = Literal["receptionist", "admin"]
 
@@ -129,9 +135,16 @@ def _principal(user: StaffUser, session_id: UUID) -> StaffPrincipal:
 
 class StaffAuthService:
     def __init__(
-        self, session_factory: async_sessionmaker[AsyncSession], *, clock: Callable[[], datetime] = utc_now
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        secret: bytes,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
+        if len(secret) < 32:
+            raise ValueError("the auth secret needs at least 32 bytes")
         self._session_factory = session_factory
+        self._secret = secret
         self._clock = clock
 
     async def create_user(
@@ -150,6 +163,7 @@ class StaffAuthService:
         return user
 
     async def login(self, username: str, password: str) -> LoginResult:
+        """One transaction for both paths; every failed attempt, real or unknown, then does the same purge."""
         now = self._clock()
         async with self._session_factory() as session, session.begin():
             user = await session.scalar(
@@ -158,35 +172,44 @@ class StaffAuthService:
                 .with_for_update()
             )
             if user is None or not user.active:
-                return await self._unknown_login(session, username, password, now)
-            if user.locked_until is not None and user.locked_until > now:
-                await _verify(user.password_hash, password)  # same work as an unlocked attempt
-                self._audit(session, user.id, "staff.login", {}, ResultCode.ACCOUNT_LOCKED)
-                return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=user.locked_until)
-            if not await _verify(user.password_hash, password):
-                state = _Failures(user.failed_attempts, user.first_failed_at, None)
-                _register_failure(state, now)
-                user.failed_attempts, user.first_failed_at = state.count, state.first_at
-                if state.locked_until is not None:
-                    user.locked_until = state.locked_until
-                    self._audit(session, user.id, "staff.lockout", {}, ResultCode.ACCOUNT_LOCKED)
-                self._audit(session, user.id, "staff.login", {}, ResultCode.UNAUTHENTICATED)
-                return LoginResult(ResultCode.UNAUTHENTICATED)
-            if _hasher.check_needs_rehash(user.password_hash):
-                user.password_hash = await hash_password(password)
-            user.failed_attempts, user.first_failed_at, user.locked_until = 0, None, None
-            user.last_login_at = now
-            token = secrets.token_urlsafe(32)
-            staff_session = StaffSession(
-                staff_user_id=user.id,
-                token_hash=token_hash(token),
-                expires_at=now + SESSION_ABSOLUTE,
-                last_seen_at=now,
-            )
-            session.add(staff_session)
-            await session.flush()
-            self._audit(session, user.id, "staff.login", {}, ResultCode.OK)
-            return LoginResult(ResultCode.OK, _principal(user, staff_session.id), token)
+                result = await self._unknown_login(session, username, password, now)
+            else:
+                result = await self._known_login(session, user, password, now)
+        if result.code is not ResultCode.OK:
+            await self._purge_old_failures(now)
+        return result
+
+    async def _known_login(
+        self, session: AsyncSession, user: StaffUser, password: str, now: datetime
+    ) -> LoginResult:
+        if user.locked_until is not None and user.locked_until > now:
+            await _verify(user.password_hash, password)  # same work as an unlocked attempt
+            self._audit(session, user.id, "staff.login", {}, ResultCode.ACCOUNT_LOCKED)
+            return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=user.locked_until)
+        if not await _verify(user.password_hash, password):
+            state = _Failures(user.failed_attempts, user.first_failed_at, None)
+            _register_failure(state, now)
+            user.failed_attempts, user.first_failed_at = state.count, state.first_at
+            if state.locked_until is not None:
+                user.locked_until = state.locked_until
+                self._audit(session, user.id, "staff.lockout", {}, ResultCode.ACCOUNT_LOCKED)
+            self._audit(session, user.id, "staff.login", {}, ResultCode.UNAUTHENTICATED)
+            return LoginResult(ResultCode.UNAUTHENTICATED)
+        if _hasher.check_needs_rehash(user.password_hash):
+            user.password_hash = await hash_password(password)
+        user.failed_attempts, user.first_failed_at, user.locked_until = 0, None, None
+        user.last_login_at = now
+        token = secrets.token_urlsafe(32)
+        staff_session = StaffSession(
+            staff_user_id=user.id,
+            token_hash=token_hash(token),
+            expires_at=now + SESSION_ABSOLUTE,
+            last_seen_at=now,
+        )
+        session.add(staff_session)
+        await session.flush()
+        self._audit(session, user.id, "staff.login", {}, ResultCode.OK)
+        return LoginResult(ResultCode.OK, _principal(user, staff_session.id), token)
 
     async def _unknown_login(
         self, session: AsyncSession, username: str, password: str, now: datetime
@@ -196,14 +219,16 @@ class StaffAuthService:
         key = username.strip().lower()
         if not key or len(key) > MAX_USERNAME_LENGTH:
             return LoginResult(ResultCode.UNAUTHENTICATED)  # cannot be a real username: nothing to track
-        username_hash = hashlib.sha256(key.encode()).digest()
-        await session.execute(
+        username_hash = hmac.new(self._secret, key.encode(), hashlib.sha256).digest()
+        # One statement inserts or locks the row, so concurrent attempts serialise on it.
+        row = await session.scalar(
             insert(LoginFailure)
-            .values(username_hash=username_hash)
-            .on_conflict_do_nothing(index_elements=["username_hash"])
+            .values(username_hash=username_hash, updated_at=now)
+            .on_conflict_do_update(index_elements=["username_hash"], set_={"updated_at": now})
+            .returning(LoginFailure)
         )
-        row = await session.get_one(LoginFailure, username_hash, with_for_update=True)
-        row.updated_at = now
+        if row is None:
+            raise RuntimeError("upsert returned no row")
         if row.locked_until is not None and row.locked_until > now:
             self._audit(session, None, "staff.login", {}, ResultCode.ACCOUNT_LOCKED)
             return LoginResult(ResultCode.ACCOUNT_LOCKED, locked_until=row.locked_until)
@@ -214,9 +239,22 @@ class StaffAuthService:
             state.first_at,
             state.locked_until,
         )
-        await session.execute(delete(LoginFailure).where(LoginFailure.updated_at < now - FAILURE_RETENTION))
         self._audit(session, None, "staff.login", {}, ResultCode.UNAUTHENTICATED)
         return LoginResult(ResultCode.UNAUTHENTICATED)
+
+    async def _purge_old_failures(self, now: datetime) -> None:
+        """Best effort, in its own short transaction: never blocks or fails a login."""
+        try:
+            async with self._session_factory() as session, session.begin():
+                stale = (
+                    select(LoginFailure.username_hash)
+                    .where(LoginFailure.updated_at < now - FAILURE_RETENTION)
+                    .limit(100)
+                    .with_for_update(skip_locked=True)
+                )
+                await session.execute(delete(LoginFailure).where(LoginFailure.username_hash.in_(stale)))
+        except SQLAlchemyError as exc:
+            log.warning("login_failure_purge_failed", **safe_exception_fields(exc))
 
     async def authenticate(self, token: str) -> StaffPrincipal | None:
         now = self._clock()

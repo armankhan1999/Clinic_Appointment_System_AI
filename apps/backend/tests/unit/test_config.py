@@ -21,6 +21,7 @@ def make_settings(**overrides: Any) -> Settings:
         "gemini_api_key": SECRET_KEY,
         "gemini_model": "gemini-3.5-flash-lite",
         "clinic_timezone": "Asia/Kolkata",
+        "auth_secret": "test-auth-secret-of-at-least-32-characters",
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -128,3 +129,11 @@ def test_plain_postgres_uses_the_bare_role_name() -> None:
 def test_test_schema_must_differ_from_the_dev_schema() -> None:
     with pytest.raises(ValidationError, match="must differ"):
         make_settings(db_schema="clinic", db_test_schema="clinic")
+
+
+def test_auth_secret_is_required_long_and_hidden() -> None:
+    settings = make_settings()
+    assert len(settings.auth_secret.get_secret_value()) >= 32
+    assert settings.auth_secret.get_secret_value() not in repr(settings)
+    with pytest.raises(ValidationError, match="auth_secret"):
+        make_settings(auth_secret="too-short")

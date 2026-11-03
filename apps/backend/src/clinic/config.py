@@ -37,6 +37,8 @@ class Settings(BaseSettings):
 
     telegram_bot_token: SecretStr
     gemini_api_key: SecretStr
+    # Keys the hashes of attempted staff usernames (never stored in the database). 32+ random characters.
+    auth_secret: SecretStr = Field(min_length=32)
     gemini_model: str
     llm_timeout_seconds: float = 8.0
 

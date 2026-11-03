@@ -1,5 +1,7 @@
 """Staff authentication (E6-S1-AC2/AC3, NFR-04, GAP-23): argon2id, lockout, server-side sessions."""
 
+import hashlib
+import hmac
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -12,6 +14,7 @@ from clinic.services.staff_auth import Role, StaffAuthService, WeakPasswordError
 
 Factory = async_sessionmaker[AsyncSession]
 PASSWORD = "correct horse battery"
+SECRET = b"test-auth-secret-of-at-least-32-characters"
 
 
 class Clock:
@@ -23,7 +26,7 @@ class Clock:
 
 
 async def _service(session_factory: Factory, clock: Clock, role: Role = "receptionist") -> StaffAuthService:
-    service = StaffAuthService(session_factory, clock=clock)
+    service = StaffAuthService(session_factory, secret=SECRET, clock=clock)
     await service.create_user(
         username="Riya", display_name="Riya S", role=role, password=PASSWORD, actor_id=None
     )
@@ -41,7 +44,7 @@ async def test_passwords_are_stored_as_argon2id_hashes(session_factory: Factory)
 
 async def test_short_passwords_are_refused(session_factory: Factory) -> None:
     with pytest.raises(WeakPasswordError):
-        await StaffAuthService(session_factory).create_user(
+        await StaffAuthService(session_factory, secret=SECRET).create_user(
             username="sam", display_name="Sam", role="admin", password="short", actor_id=None
         )
 
@@ -157,7 +160,9 @@ async def test_unknown_username_lockout_survives_a_restart_like_a_real_one(sessi
     for _ in range(5):
         await first.login("riya", "wrong password")
         await first.login("nobody-here", "wrong password")
-    restarted = StaffAuthService(session_factory, clock=clock)  # a new process, or a second API instance
+    restarted = StaffAuthService(
+        session_factory, secret=SECRET, clock=clock
+    )  # a new process, or a second API instance
     assert (await restarted.login("riya", "wrong password")).code == ResultCode.ACCOUNT_LOCKED
     assert (await restarted.login("nobody-here", "wrong password")).code == ResultCode.ACCOUNT_LOCKED
 
@@ -168,7 +173,8 @@ async def test_unknown_usernames_are_stored_only_as_hashes(session_factory: Fact
     async with session_factory() as session:
         stored = (await session.scalars(select(LoginFailure))).all()
     assert len(stored) == 1
-    assert b"secret-name" not in stored[0].username_hash
+    assert stored[0].username_hash != hashlib.sha256(b"secret-name").digest(), "keyed: not a plain hash"
+    assert stored[0].username_hash == hmac.new(SECRET, b"secret-name", hashlib.sha256).digest()
 
 
 async def test_overlong_usernames_are_refused_without_storing_anything(session_factory: Factory) -> None:
