@@ -16,8 +16,12 @@ class InsecureDatabaseTlsError(RuntimeError):
     """Production must verify the database certificate (CA and hostname)."""
 
 
-def database_ssl(settings: Settings) -> ssl.SSLContext | str:
-    """verify-full with the configured Supabase CA; unverified TLS is allowed only outside production."""
+def database_ssl(settings: Settings) -> ssl.SSLContext | str | bool:
+    """verify-full with the Supabase CA; unverified or disabled TLS is allowed only outside production."""
+    if settings.db_ssl == "disable":
+        if settings.env == "production":
+            raise InsecureDatabaseTlsError("DB_SSL=disable is not allowed in production")
+        return False
     if settings.db_ssl_root_cert is not None:
         context = ssl.create_default_context(cafile=str(settings.db_ssl_root_cert))
         context.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -33,6 +37,8 @@ def database_ssl(settings: Settings) -> ssl.SSLContext | str:
 def make_engine(target: DbTarget, settings: Settings, *, null_pool: bool = False) -> AsyncEngine:
     options: dict[str, Any] = {
         "pool_pre_ping": True,
+        # SQL errors must never carry bound values such as phone numbers into logs.
+        "hide_parameters": True,
         "connect_args": {
             "ssl": database_ssl(settings),
             "server_settings": {"application_name": f"clinic-{target.role}"},

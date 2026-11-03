@@ -28,6 +28,7 @@ from telegram.ext import (
 
 from clinic.conversation.replies import IncomingUser, Reply
 from clinic.conversation.service import ConversationService
+from clinic.observability import safe_exception_fields
 
 log = structlog.get_logger(__name__)
 
@@ -113,8 +114,8 @@ class TelegramAdapter:
             await context.bot.send_message(chat.id, reply.text, reply_markup=to_markup(reply))
 
     async def on_error(self, _: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-        error = context.error
-        log.error("telegram_handler_error", error=type(error).__name__, exc_info=error)
+        if context.error is not None:
+            log.error("telegram_handler_error", **safe_exception_fields(context.error))
 
 
 def build_application(

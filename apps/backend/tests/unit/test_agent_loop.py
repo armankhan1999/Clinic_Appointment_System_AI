@@ -180,3 +180,14 @@ async def test_empty_model_reply_is_not_sent() -> None:
         ctx(), ConversationMemory(), 1, "x", "system"
     )
     assert outcome.stopped == "llm_error"
+
+
+async def test_tool_failure_log_contains_no_exception_message(capsys: pytest.CaptureFixture[str]) -> None:
+    from clinic.observability import configure_logging
+
+    configure_logging("INFO")
+    llm = ScriptedLLM(call_turn(("echo", {"word": "hi"})), text_turn("problem"))
+    await make_loop(llm, Recorder(fail=True), []).run(ctx(), ConversationMemory(), 1, "x", "system")
+    output = capsys.readouterr().out
+    assert "tool_failed" in output
+    assert "exploded" not in output

@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from clinic.config import DbTarget, Settings, get_settings
 from clinic.db.session import make_engine
-from clinic.observability import bind_request_id, new_request_id, request_id_var
+from clinic.observability import bind_request_id, new_request_id, request_id_var, safe_exception_fields
 
 log = structlog.get_logger(__name__)
 
@@ -108,8 +108,13 @@ def create_app(settings: Settings | None = None, *, readiness: Readiness | None 
         with bind_request_id(request_id):
             try:
                 response = await call_next(request)
-            except Exception:
-                log.exception("http_unhandled_error", method=request.method, path=request.url.path)
+            except Exception as exc:
+                log.error(  # noqa: TRY400  # no traceback text: messages can carry personal data
+                    "http_unhandled_error",
+                    method=request.method,
+                    path=request.url.path,
+                    **safe_exception_fields(exc),
+                )
                 response = error_response(500, "ERROR", "Something went wrong. Please try again.")
             response.headers["X-Request-ID"] = request_id
             response.headers.update(SECURITY_HEADERS)

@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import logging
 import sys
+import traceback
 import uuid
 from collections.abc import Iterator, MutableMapping
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any
+from pathlib import Path
+from typing import Any, TextIO
 
 import structlog
 
@@ -34,6 +36,23 @@ SENSITIVE_KEYS = frozenset(
 )
 # httpx logs full request URLs at INFO; Telegram URLs embed the bot token.
 QUIET_LOGGERS = ("httpx", "httpcore")
+
+
+def safe_exception_fields(exc: BaseException) -> dict[str, Any]:
+    """Exception type and code locations only. Messages and SQL parameters can carry personal data."""
+    frames = traceback.extract_tb(exc.__traceback__)
+    return {
+        "error": type(exc).__name__,
+        "where": [f"{Path(f.filename).name}:{f.lineno} in {f.name}" for f in frames][-10:],
+    }
+
+
+class _CurrentStdoutHandler(logging.StreamHandler[TextIO]):
+    """Writes to whatever sys.stdout is at emit time, so a replaced stream never goes stale."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.stream = sys.stdout
+        super().emit(record)
 
 
 def new_request_id() -> str:
@@ -64,7 +83,9 @@ def _redact(_: Any, __: str, event: MutableMapping[str, Any]) -> MutableMapping[
 
 def configure_logging(level: str) -> None:
     numeric_level = logging.getLevelNamesMapping()[level.upper()]
-    logging.basicConfig(level=numeric_level, stream=sys.stdout, format="%(message)s", force=True)
+    handler = _CurrentStdoutHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logging.basicConfig(level=numeric_level, handlers=[handler], force=True)
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(max(numeric_level, logging.WARNING))
     structlog.configure(
@@ -78,6 +99,6 @@ def configure_logging(level: str) -> None:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(numeric_level),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=structlog.PrintLoggerFactory(),  # resolves sys.stdout per logger
         cache_logger_on_first_use=False,
     )

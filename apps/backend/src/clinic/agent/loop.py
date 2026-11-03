@@ -17,6 +17,7 @@ from clinic.agent.llm import LLM, LlmTurn, LlmUnavailableError, ModelTurn, ToolC
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.tools import ToolContext, ToolRegistry, ToolResult
 from clinic.domain.results import ResultCode
+from clinic.observability import safe_exception_fields
 from clinic.services.audit import AuditService
 
 log = structlog.get_logger(__name__)
@@ -135,9 +136,9 @@ class AgentLoop:
                 audit_args = args.model_dump(mode="json", exclude_none=True)
                 try:
                     result = await spec.executor(ctx, args)
-                except Exception:
-                    # The model gets a generic error; the details go to the log for operators.
-                    log.exception("tool_failed", tool=spec.name)
+                except Exception as exc:
+                    # The model gets a generic error; operators get the type and code location only.
+                    log.error("tool_failed", tool=spec.name, **safe_exception_fields(exc))  # noqa: TRY400
                     result = ToolResult(
                         ResultCode.ERROR, {"error": "the tool failed, try again or offer staff help"}
                     )

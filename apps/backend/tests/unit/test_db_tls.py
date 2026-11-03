@@ -39,3 +39,12 @@ def test_production_without_ca_refuses_to_connect() -> None:
 def test_missing_ca_file_is_rejected_at_startup(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="db_ssl_root_cert"):
         make_settings(db_ssl_root_cert=tmp_path / "missing.crt")
+
+
+def test_tls_can_be_disabled_for_a_local_ci_database() -> None:
+    assert database_ssl(make_settings(env="test", db_ssl="disable")) is False
+
+
+def test_disabling_tls_is_refused_in_production(ca_file: Path) -> None:
+    with pytest.raises(InsecureDatabaseTlsError, match="DB_SSL=disable"):
+        database_ssl(make_settings(env="production", db_ssl="disable", db_ssl_root_cert=ca_file))

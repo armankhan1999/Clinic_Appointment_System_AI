@@ -53,3 +53,32 @@ def test_new_request_ids_are_unique_and_header_safe() -> None:
     ids = {new_request_id() for _ in range(100)}
     assert len(ids) == 100
     assert all(len(i) == 32 and i.isalnum() for i in ids)
+
+
+def _raise_with_personal_data() -> None:
+    raise ValueError("patient +12025550150 Asha Rao said: chest pain")
+
+
+def test_safe_exception_fields_keep_location_but_drop_the_message() -> None:
+    from clinic.observability import safe_exception_fields
+
+    try:
+        _raise_with_personal_data()
+    except ValueError as exc:
+        fields = safe_exception_fields(exc)
+    rendered = repr(fields)
+    assert fields["error"] == "ValueError"
+    assert any("_raise_with_personal_data" in frame for frame in fields["where"])
+    for leaked in ("2025550150", "Asha", "chest pain"):
+        assert leaked not in rendered
+
+
+def test_engine_hides_sql_parameters_in_errors() -> None:
+    from clinic.config import DbTarget
+    from clinic.db.session import make_engine
+
+    from .test_config import make_settings
+
+    settings = make_settings(db_ssl="disable")
+    engine = make_engine(DbTarget.test(settings), settings, null_pool=True)
+    assert engine.sync_engine.hide_parameters is True

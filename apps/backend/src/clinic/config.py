@@ -20,7 +20,8 @@ class Settings(BaseSettings):
 
     env: Literal["development", "test", "production"] = "development"
 
-    supabase_project_ref: str
+    # Supabase pooler logins are `role.<project_ref>`; leave empty for a plain Postgres server (CI).
+    supabase_project_ref: str = ""
     db_host: str
     db_port: int = 5432
     db_name: str = "postgres"
@@ -31,6 +32,8 @@ class Settings(BaseSettings):
     db_test_schema: str = "clinic_test"
     # Supabase CA (prod-ca-2021.crt from Database Settings > SSL Configuration). Enables verify-full.
     db_ssl_root_cert: FilePath | None = None
+    # "disable" exists only for the throwaway CI container; production refuses it.
+    db_ssl: Literal["auto", "disable"] = "auto"
 
     telegram_bot_token: SecretStr
     gemini_api_key: SecretStr
@@ -89,7 +92,9 @@ class DbTarget:
     def url(self, settings: Settings) -> URL:
         return URL.create(
             drivername="postgresql+asyncpg",
-            username=f"{self.role}.{settings.supabase_project_ref}",
+            username=f"{self.role}.{settings.supabase_project_ref}"
+            if settings.supabase_project_ref
+            else self.role,
             password=self.password.get_secret_value(),
             host=settings.db_host,
             port=settings.db_port,

@@ -118,3 +118,8 @@ def test_api_port_defaults_to_8000_and_is_validated() -> None:
     assert make_settings(api_port=8010).api_port == 8010
     with pytest.raises(ValidationError, match="api_port"):
         make_settings(api_port=80)
+
+
+def test_plain_postgres_uses_the_bare_role_name() -> None:
+    settings = make_settings(supabase_project_ref="")
+    assert DbTarget.app(settings).url(settings).username == "clinic_app"
