@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { EmptyState, ErrorState, LoadingState, RefetchNotice } from "@/components/states";
@@ -17,6 +18,7 @@ import { LeaveManager } from "./leave-manager";
 import { ScheduleEditor } from "./schedule-editor";
 
 export function DoctorDetail() {
+  const [tab, setTab] = useState("hours");
   const params = useParams<{ id: string }>();
   const id = params.id;
   // The contract has no GET /doctors/{id}; the full list is small and already cached by the list page.
@@ -56,15 +58,16 @@ export function DoctorDetail() {
           </span>
         }
       />
-      <Tabs defaultValue="hours" className="gap-4">
+      <Tabs value={tab} onValueChange={setTab} className="gap-4">
         <TabsList>
           <TabsTrigger value="hours">Weekly hours</TabsTrigger>
           <TabsTrigger value="leave">Leave days</TabsTrigger>
         </TabsList>
-        <TabsContent value="hours">
+        {/* Both panels stay mounted so switching tabs never discards unsaved hours or a leave in progress. */}
+        <TabsContent value="hours" forceMount hidden={tab !== "hours"}>
           <ScheduleEditor doctorId={doctor.id} doctorName={doctor.name} />
         </TabsContent>
-        <TabsContent value="leave">
+        <TabsContent value="leave" forceMount hidden={tab !== "leave"}>
           <LeaveManager doctorId={doctor.id} doctorName={doctor.name} />
         </TabsContent>
       </Tabs>
