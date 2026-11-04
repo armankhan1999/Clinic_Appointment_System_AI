@@ -1,0 +1,102 @@
+# Acceptance report (2026-11-04)
+
+Status of the Clinic Appointment Booking Agent against the PRD (`docs/requirements/source/brd-prd-backlog.md`),
+with every figure taken from a recorded run in [`../tracking/test-execution-tracker.md`](../tracking/test-execution-tracker.md).
+Story and AC detail: [`../tracking/user-story-tracker.md`](../tracking/user-story-tracker.md) and
+[`../tracking/requirement-traceability-matrix.md`](../tracking/requirement-traceability-matrix.md).
+
+## What exists
+
+| Part | Where | Notes |
+|---|---|---|
+| Telegram bot + Gemini tool-calling agent | `apps/backend/src/clinic/{bot,conversation,agent}` | Consent-first registration, booking/reschedule/cancel with Confirm taps, FAQ, handoff, emergency filter before the model, grounding guard |
+| Booking service and database | `apps/backend/src/clinic/{services,db}`, `apps/backend/migrations` | Postgres (Supabase), double booking blocked by constraints, per-patient limits under row locks, append-only audit log |
+| Reminders and notices | `services/reminders.py`, `services/notifications.py`, PTB job queue | 24 h and 2 h reminders, claimed once; outbox with retries and staff flag |
+| Staff API | `apps/backend/src/clinic/api`, contract `docs/api/staff-api.md` | Session cookie + CSRF, roles, lockout, audit, pagination |
+| Staff dashboard | `apps/web` (Next.js 16) | Today, booking, admin screens (doctors, schedules, leave, FAQ, settings, audit, metrics, staff accounts) |
+| Evaluation suite | `apps/backend/tests/integration/test_agent_eval.py` | 35 scenarios of PRD §3.9; reports in `apps/backend/reports/`, copies in this folder |
+| Packaging and CI | `scripts/start.ps1`, `scripts/stop.ps1`, `.github/workflows/ci.yml` | One-command start; CI for backend and dashboard |
+
+## Verification summary
+
+| Run | Result |
+|---|---|
+| M6-FULL-01 backend unit + integration (before the afternoon fixes) | 402 passed, 0 failed |
+| GAPS-01 + follow-up (afternoon fixes) | 78 + 16 passed after one test-data fix |
+| WEB-UNIT-02 dashboard lint, types, unit/component | 116 passed; lint and tsc clean |
+| WEB-E2E-02 dashboard on the live stack | 18 passed, clean console and network on every test |
+| START-01 / START-02 one-command start | 23.5 s (cached build), 24.0 s (fresh build) |
+| FRESH-01 README steps from a clean clone (no credentials) | install, 220 + 116 tests, build: all pass |
+| SEC-SCAN-01 secrets in history and tracked files | 0 hits |
+| CI-01 first GitHub Actions run | **failed** (4 TLS unit tests saw the job's `DB_SSL`); fixed and reproduced locally, not yet re-run on GitHub |
+| M6-FULL-02 final backend regression | 414 passed, 0 failed (37 eval/live tests deselected by design) |
+
+## Agent evaluation against PRD §3.9 (E7-S5-AC3)
+
+Two full runs of the same 35 scenarios, same model (`gemini-3.5-flash-lite`, free tier), same prompt
+(2026-11-04.3), same pinned clock, on this PC with the database in `eu-west-3`:
+
+| Category (§3.9 target) | Diagnostic budget 45 s ([report](eval-2026-11-04-diagnostic-budget.md)) | Production budget 8 s ([report](eval-2026-11-04-production-budget.md)) |
+|---|---|---|
+| Booking happy paths (≥ 90%) | 8/8 met | 0/8 not met |
+| Reschedule and cancel (≥ 90%) | 6/6 met | 1/6 not met |
+| Edge cases: no slots, past date, cut-off (≥ 90%) | 6/6 met | 6/6 met |
+| Medical-advice requests (100% refused) | 5/5 met | 5/5 met |
+| Emergency messages (100%, no model call) | 3/3 met (0 model calls) | 3/3 met (0 model calls) |
+| Prompt injection / other patients' data (100% blocked) | 4/4 met | 4/4 met |
+| Questions not in the FAQ (100% no invented answer) | 3/3 met | 1/3 not met |
+| Task success rate | 100% | 57% |
+| Correct-tool rate | 100% | 54% |
+| Average tool calls per task | 1.74 | 0.71 |
+| p95 reply time | 23.3 s | 10.5 s |
+| Median turn with model calls | 8.4 s (model 5.5 s, everything else 3.9 s) | 9.6 s (model 5.7 s) |
+
+**Gap explanation.** Every one of the 15 production-budget failures is the same event: the whole turn
+(model calls + tool queries + audit writes) exceeded the 8 s budget and the patient received the fallback
+message with the clinic phone number. No failure was a wrong answer, a wrong tool, a safety miss or a data
+leak; with time to finish, the same scenarios pass 35/35. The time goes to two places:
+
+1. **Model latency (R-GEM-02):** the free-tier model alone takes a median 5.5–5.7 s per turn, already above
+   NFR-01's 5 s.
+2. **Database distance (R-LAT-01):** ~128 ms per round trip from this PC to `eu-west-3` adds a median
+   3.9 s per turn (DB-LAT-01).
+
+The 8 s figure is a design choice (`docs/architecture/agent-design.md`), made to satisfy E1-S1-AC3
+("fallback within 10 s when the provider is unreachable"); the PRD itself does not cap a working multi-step
+turn at 8 s. Options, for the owner to decide:
+
+| Option | Effect | Trade-off |
+|---|---|---|
+| A. Keep 8 s per model call (E1-S1-AC3 still holds) but allow a longer whole-turn budget (for example 25 s) and show Telegram's "typing…" status | Task success as in the diagnostic run on this PC | Slow turns stay slow; NFR-01 still not met |
+| B. Run the API/bot next to the database (or move the project to `ap-south-1`) | Removes most of the 3.9 s non-model time | Infrastructure change |
+| C. Paid or faster model tier | Lowers the 5.5 s model time; needed for NFR-01 | Cost |
+
+Repeat runs: each run used `EVAL_RUNS=1`; run-to-run variance is not yet measured (§3.9 asks for N runs).
+
+## Non-functional requirements
+
+| NFR | Status | Evidence |
+|---|---|---|
+| NFR-01 reply ≤ 5 s for 95% | **Not met on this PC** | p95 10.5 s (production budget) / 23.3 s (diagnostic); model alone ≈ 5.5 s median |
+| NFR-02 no duplicate or missed reminders | Met (automated) | `test_reminders_are_never_sent_twice_even_after_a_restart` (M6-FULL-01) |
+| NFR-03 secrets only in `.env` | Met | `.gitignore`, SEC-SCAN-01, START-01 log scan |
+| NFR-04 hashed passwords, lockout | Met | argon2id, 5 failures / 15 min (test_staff_auth.py) |
+| NFR-05 patient data isolation | Met | ToolContext tests; eval PI-01..04 in both runs |
+| NFR-06 data minimisation | Met | `test_patients_store_only_identity_consent_and_bookkeeping` |
+| NFR-07 chat history in memory only, last 20 messages | Met | `test_memory_keeps_the_last_ten_exchanges_per_user`, `test_memory_forgets_an_idle_conversation` |
+| NFR-08 rate limit, 1,000-character limit | Met | test_rate_limit.py, test_m4_conversation.py |
+| NFR-09 tap buttons for confirmations and reminders | Met (automated); **Telegram tap-through by a person not done (BLK-06)** | conversation and reminder tests |
+| NFR-10 tests and evaluation suite | Met | this report |
+| NFR-11 JSON logs with a request id per message | Met | test_observability.py, `test_each_message_gets_its_own_request_id_shared_by_its_tool_calls` |
+
+## Open items before go-live
+
+| Item | Owner |
+|---|---|
+| Decide the reply-time option above (A, B and/or C) | Arman |
+| BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
+| BLK-06: a person taps through registration, booking and reminders in Telegram | Arman |
+| Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |
+| D-33: keep `cn@0.5.2` or switch to `clsx` + `tailwind-merge` | Arman |
+| Push `feat/m6-quality-e2e` so CI re-runs with the fix (main's last CI run is red) | Arman to approve |
+| Security residual risks: [`../security/security-review.md`](../security/security-review.md) | — |
