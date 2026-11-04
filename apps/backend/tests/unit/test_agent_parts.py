@@ -6,8 +6,17 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from google.genai import types
+from pydantic import SecretStr
 
-from clinic.agent.llm import ModelText, ModelTurn, ToolCall, ToolResults, UserText, to_gemini_contents
+from clinic.agent.llm import (
+    GeminiLLM,
+    ModelText,
+    ModelTurn,
+    ToolCall,
+    ToolResults,
+    UserText,
+    to_gemini_contents,
+)
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.prompt import build_system_prompt
 from clinic.agent.tools import ListDoctorsArgs, ToolResult, tool_json_schema
@@ -113,3 +122,8 @@ def test_schema_keeps_arguments_named_like_schema_keywords() -> None:
     assert schema["required"] == ["title"]
     assert "title" not in schema["properties"]["title"]
     assert schema["properties"]["default"]["type"] == "integer"
+
+
+async def test_gemini_client_can_be_closed_without_a_network_call() -> None:
+    llm = GeminiLLM(SecretStr("not-a-real-key"), "gemini-3.5-flash-lite", 8.0)
+    await llm.aclose()  # releases the HTTP client's sockets (no request is made)
