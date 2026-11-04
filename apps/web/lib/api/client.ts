@@ -29,6 +29,24 @@ export interface RequestOptions {
   csrf?: boolean;
 }
 
+/*
+ * Reads sent without user input in the last minute (the 30 s auto-refresh on an
+ * unattended screen) are marked as background, so they do not keep the session's
+ * 60-minute idle timeout from expiring.
+ */
+const BACKGROUND_AFTER_MS = 60_000;
+let lastUserInput = Date.now();
+
+export function noteUserInput(at: number = Date.now()): void {
+  lastUserInput = at;
+}
+
+if (typeof window !== "undefined") {
+  for (const type of ["pointerdown", "keydown", "wheel", "touchstart"] as const) {
+    window.addEventListener(type, () => noteUserInput(), { capture: true, passive: true });
+  }
+}
+
 let csrfToken: string | null = null;
 let csrfRefresh: Promise<string> | null = null;
 let unauthenticatedHandler: (() => void) | null = null;
@@ -119,6 +137,9 @@ async function send(path: string, options: RequestOptions): Promise<{ response: 
   if (UNSAFE_METHODS.has(method) && options.csrf !== false) {
     headers["X-CSRF-Token"] = csrfToken ?? (await refreshCsrfToken());
   }
+  if (method === "GET" && Date.now() - lastUserInput > BACKGROUND_AFTER_MS) {
+    headers["X-Background-Refresh"] = "1";
+  }
 
   const controller = new AbortController();
   let timedOut = false;
@@ -172,9 +193,10 @@ async function execute(path: string, options: RequestOptions, isRetry = false): 
       setCsrfToken(null);
       unauthenticatedHandler?.();
     }
-    // A stale CSRF token (e.g. after signing in again in another tab) also yields 403.
+    // A stale CSRF token (e.g. after signing in again in another tab) yields 403 with reason "csrf".
     // The server rejected the write without acting, so refreshing the token and retrying once is safe.
-    if (response.status === 403 && UNSAFE_METHODS.has(method) && options.csrf !== false && !isRetry) {
+    const staleToken = response.status === 403 && error.details?.reason === "csrf";
+    if (staleToken && UNSAFE_METHODS.has(method) && options.csrf !== false && !isRetry) {
       setCsrfToken(null);
       await refreshCsrfToken();
       return execute(path, options, true);

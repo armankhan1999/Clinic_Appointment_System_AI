@@ -7,6 +7,7 @@ import {
   errorFromResponse,
   fetchSession,
   getCsrfToken,
+  noteUserInput,
   setCsrfToken,
   setUnauthenticatedHandler,
 } from "@/lib/api/client";
@@ -135,7 +136,7 @@ describe("CSRF handling", () => {
   it("refreshes a stale token once after a 403 and retries the write", async () => {
     setCsrfToken("stale");
     const { calls } = stubFetch([
-      jsonResponse(403, errorEnvelope("FORBIDDEN", "CSRF token missing or invalid")),
+      jsonResponse(403, errorEnvelope("FORBIDDEN", "CSRF token missing or invalid", { details: { reason: "csrf" } })),
       jsonResponse(200, sessionBody("receptionist", "fresh")),
       jsonResponse(200, appointmentFixture()),
     ]);
@@ -143,12 +144,20 @@ describe("CSRF handling", () => {
     expect(calls.map((c) => c.headers["x-csrf-token"] ?? "-")).toEqual(["stale", "-", "fresh"]);
   });
 
-  it("surfaces FORBIDDEN when the retry is also refused (wrong role)", async () => {
+  it("does not retry a role refusal: only a CSRF 403 is worth a fresh token", async () => {
     setCsrfToken("tok");
+    const { calls } = stubFetch([jsonResponse(403, errorEnvelope("FORBIDDEN", "Admins only", { request_id: "r-final" }))]);
+    await expect(cancelAppointment("apt-1", "x")).rejects.toMatchObject({ code: "FORBIDDEN", requestId: "r-final" });
+    expect(calls).toHaveLength(1);
+  });
+
+  it("surfaces FORBIDDEN when the CSRF retry is also refused", async () => {
+    setCsrfToken("tok");
+    const csrf = { details: { reason: "csrf" } };
     const { calls } = stubFetch([
-      jsonResponse(403, errorEnvelope("FORBIDDEN", "Admins only")),
+      jsonResponse(403, errorEnvelope("FORBIDDEN", "Bad token", csrf)),
       jsonResponse(200, sessionBody("receptionist", "tok2")),
-      jsonResponse(403, errorEnvelope("FORBIDDEN", "Admins only", { request_id: "r-final" })),
+      jsonResponse(403, errorEnvelope("FORBIDDEN", "Bad token", { ...csrf, request_id: "r-final" })),
     ]);
     await expect(cancelAppointment("apt-1", "x")).rejects.toMatchObject({ code: "FORBIDDEN", requestId: "r-final" });
     expect(calls).toHaveLength(3);
@@ -197,3 +206,22 @@ function appointmentFixture() {
     can_mark_attendance: false,
   };
 }
+
+describe("background refreshes", () => {
+  it("marks reads made without recent user input so they do not extend the idle timeout", async () => {
+    noteUserInput(Date.now() - 61_000);
+    const { calls } = stubFetch([jsonResponse(200, { ok: true }), jsonResponse(200, { ok: true })]);
+    await apiRequest("/attention", okSchema);
+    noteUserInput();
+    await apiRequest("/attention", okSchema);
+    expect(calls.map((c) => c.headers["x-background-refresh"] ?? "-")).toEqual(["1", "-"]);
+  });
+
+  it("never marks writes as background", async () => {
+    noteUserInput(Date.now() - 61_000);
+    setCsrfToken("tok");
+    const { calls } = stubFetch([jsonResponse(200, appointmentFixture())]);
+    await cancelAppointment("apt-1", "Clinic closed");
+    expect(calls[0].headers["x-background-refresh"]).toBeUndefined();
+  });
+});
