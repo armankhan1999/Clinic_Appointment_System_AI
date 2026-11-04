@@ -1,6 +1,6 @@
 # System Architecture
 
-Rebuilt from BRD §3.4, §3.7 and §3.8 text, because the embedded 10-component diagram (L258) is not in the source file (GAP-02). Stack per D-01 (hybrid), D-02 (hosted Supabase), D-03 (Gemini), D-05 (laptop + Compose + CI).
+Rebuilt from BRD §3.4, §3.7 and §3.8 text, because the embedded 10-component diagram (L258) is not in the source file (GAP-02). Stack per D-01 (hybrid: Python core, Next.js dashboard), D-02 (hosted Supabase Postgres), D-03 (Gemini), D-05 (laptop + CI, no live cloud deployment) and D-31 (PowerShell start script instead of Docker Compose). Audited against the code on 2026-11-05 (commit 3938155). Backend paths are relative to `apps/backend/src/clinic/`.
 
 ## System context
 
@@ -8,129 +8,131 @@ Rebuilt from BRD §3.4, §3.7 and §3.8 text, because the embedded 10-component 
 flowchart LR
     Patient((Patient)) -- Telegram app --> TG[Telegram Bot API]
     Staff((Receptionist / Admin)) -- browser --> WEB[Next.js staff dashboard]
-    TG <-- long polling --> BOT[Bot + worker process<br/>python-telegram-bot]
+    TG <-- long polling --> BOT[Bot process<br/>python-telegram-bot + job queue]
     BOT -- in-process calls --> CORE[(clinic core package<br/>domain + services)]
-    WEB -- same-origin /api/v1 rewrite --> API[FastAPI API process]
+    WEB -- same-origin /api/v1 rewrite --> API[FastAPI process<br/>127.0.0.1 only]
     API -- in-process calls --> CORE
-    CORE -- SQL over TLS --> DB[(Supabase Postgres<br/>schema clinic)]
+    CORE -- asyncpg over TLS<br/>session pooler :5432 --> DB[(Supabase Postgres<br/>schema clinic)]
     BOT -- HTTPS --> LLM[Google Gemini API]
 ```
 
-## Containers / processes
+## Processes
 
-| Process | Tech | Responsibility | Holds secrets |
+| Process | Tech | Responsibility | Secrets it uses |
 |---|---|---|---|
-| `web` | Next.js (App Router, TypeScript, Tailwind, shadcn/ui, TanStack Query, React Hook Form + Zod) | Staff UI; rewrites `/api/v1/*` to `api` | none |
-| `api` | FastAPI + Pydantic + SQLAlchemy 2 (async) | Staff REST API, auth, authorization, audit | DB URL, session secret |
-| `bot` | python-telegram-bot (async, long polling) + scheduled jobs | Patient conversations, agent loop, reminders every 5 min (E4-S1), notification outbox drain (E4-S4) | Telegram token, Gemini key, DB URL |
-| `db` | Supabase hosted Postgres | Source of truth; constraints enforce double-booking and uniqueness rules | — |
+| `web` | Next.js 16 (App Router, TypeScript, Tailwind v4, shadcn/ui, TanStack Query, React Hook Form + Zod) | Staff UI. `next.config.ts` rewrites `/api/v1/*` to `http://127.0.0.1:${API_PORT}`; `proxy.ts` only redirects to `/login` when the session cookie is missing | none (only `API_PORT`) |
+| `api` | FastAPI + Pydantic + SQLAlchemy 2 (async) on uvicorn, bound to `127.0.0.1` (`api/__main__.py`) | Staff REST API, authentication, authorization, audit, `/healthz` and `/readyz` | `clinic_app` database password, `AUTH_SECRET` |
+| `bot` | python-telegram-bot 22.8 (async, long polling, private chats only) with its job queue (APScheduler) | Patient conversations and the agent loop; job `reminders` every 300 s (E4-S1-AC1) and job `outbox` every 60 s for clinic-side notices (E4-S4); logs `scheduler_heartbeat` on each reminder run | Telegram token, Gemini key, `clinic_app` database password |
+| `db` | Supabase hosted Postgres 17 | Source of truth; constraints enforce double-booking and uniqueness rules | — |
 
-The scheduler runs **inside the bot process** because sending reminders needs the bot's Telegram client. That keeps one owner of the Telegram token. Reminder idempotency lives in the database (unique `(appointment_id, type)`), so restarts cannot duplicate reminders (NFR-02). The `api` process never sends Telegram messages: it writes `notifications` rows in the same transaction as the staff change, and the bot drains them (outbox). This is least privilege and loses nothing on a crash.
+Both Python processes load the same `Settings` from the repository-root `.env` (`config.py`), and that class requires every secret, so the API process also has the Telegram token and Gemini key in its configuration. It never uses them: it makes no Telegram or Gemini call.
 
-**Single-instance assumption:** one `bot` process (in-memory conversation state, rate limits and pending confirmations, per NFR-07 and D-07). `api` is stateless and could scale horizontally.
+The scheduler runs **inside the bot process** because sending reminders needs the bot's Telegram client. Reminder idempotency lives in the database (UNIQUE `(appointment_id, type)`): a reminder is claimed before it is sent, so a restart cannot send it twice (NFR-02). The API never sends Telegram messages: it writes `notifications` rows in the same transaction as the staff cancellation or leave, and the bot's `outbox` job sends them (transactional outbox), so a crash cannot lose a notice.
+
+**Single-instance assumption:** one `bot` process, because conversation memory, pending confirmations, registration state and the message rate limiter live in process memory (NFR-07, D-07, GAP-26). The bot handles one update at a time per user and different users concurrently (`bot/telegram_app.py` `UserLocks`). The API keeps its session and lockout state in the database, but its login rate limiter (10 attempts per minute per client) is in process memory, so running several API processes would weaken that limit.
 
 ## Backend package layout (`apps/backend/src/clinic`)
 
 ```mermaid
 flowchart TB
     subgraph adapters [Adapters]
-        api[api: routers, deps, schemas, middleware]
-        bot[bot: PTB handlers -> ConversationService]
-        workers[workers: reminder job, outbox job]
+        api[api: app, routes_auth, routes_staff, routes_admin, deps, errors]
+        bot[bot: telegram_app - handlers, reminder and outbox jobs, typing status]
     end
     subgraph app [Application]
-        conv[conversation: registration FSM, ConversationService]
-        agent[agent: llm adapter, tools, loop, guardrails, pending, grounding, memory]
-        services[services: booking, availability, patient, schedule, faq, ticket, alert, audit, staff_auth, metrics, notification, reminder]
+        conv[conversation: service, registration, appointment_actions]
+        agent[agent: llm, tools, loop, prompt, pending, grounding, memory, guardrails, rate_limit]
+        services[services: booking, availability, patients, doctors, faq, tickets, handoff, alerts, audit, reminders, notifications, clinic_settings, staff_auth, staff_ops, admin]
     end
     subgraph core [Core]
-        domain[domain: slots, dates, policies, state machine, result codes - pure, no I/O]
-        db[db: models, session, repositories]
-        cfg[config + observability]
+        domain[domain: slots, dates, appointments, patients, messages, results - pure, no I/O]
+        db[db: models, session]
+        cfg[config, observability, runtime]
     end
     api --> services
     bot --> conv --> agent --> services
     conv --> services
-    workers --> services
+    bot --> services
     services --> domain
     services --> db
 ```
 
-Dependency rule: arrows point inward only. `domain` imports nothing from the project, which makes it unit-testable without a database. Adapters contain no business rules.
+Dependency rule, checked against the imports: `domain` imports only `domain`, so it is unit-testable without a database; `db` imports only `config`; `services` import `domain`, `db` and other services; nothing in `services` imports `agent`, `conversation`, `api` or `bot`. One exception: the API reuses `agent/rate_limit.py` for its login limiter. `runtime.py` is the composition root for the bot process; `api/app.py` builds the API's services.
 
 ## Repository layout
 
 ```
 clinic-appointment-agent/
 ├── apps/
-│   ├── backend/            # one Python project: api, bot, workers share the core package
-│   │   ├── src/clinic/     # config, observability, domain, db, services, agent, conversation, bot, workers, api
-│   │   ├── migrations/     # Alembic (single source of truth for schema)
-│   │   ├── scripts/        # seed, create-admin
-│   │   ├── tests/          # unit/, integration/, eval/
-│   │   └── pyproject.toml  # uv-managed, pinned lockfile
-│   └── web/                # Next.js dashboard (app/, components/, features/, lib/, tests/)
-├── docs/                   # requirements, architecture, design, api, security, testing, deployment, tracking, final
-├── scripts/start.ps1       # one-command local start (E7-S6)
-├── docker-compose.yml      # same stack in containers (needs Docker; not verifiable on this machine)
+│   ├── backend/              # one Python project: the api and bot processes share the core package
+│   │   ├── src/clinic/       # config, observability, runtime, domain, db, services, agent, conversation, bot, api
+│   │   ├── migrations/       # Alembic, the single source of truth for the schema (0001..0003)
+│   │   ├── scripts/          # seed.py, create_admin.py
+│   │   ├── tests/            # unit/, integration/ (includes the evaluation suite), live/
+│   │   └── pyproject.toml    # uv-managed, locked in uv.lock
+│   └── web/                  # Next.js dashboard: app/, components/, features/, lib/, tests/{unit,e2e}, proxy.ts
+├── docs/                     # api, architecture, design, operations, requirements, security, superpowers, testing, tracking
+├── infrastructure/db/        # bootstrap.sql (roles, schemas), bootstrap_rollback.sql, ci_prelude.sql, ci_roles.sql
+├── scripts/                  # start.ps1, stop.ps1, restart.ps1, check_env.py, db_role_passwords.py
 ├── .github/workflows/ci.yml
-├── .env.example  README.md  SECURITY.md  CONTRIBUTING.md  PROJECT_TRACKER.md
+└── .env.example  README.md  PROJECT_TRACKER.md
 ```
 
-This adapts the master prompt's `apps/api` to `apps/backend`, because the bot and workers share the API's Python core. A separate `supabase/` migrations folder is not used: Alembic owns the schema.
+This adapts the master prompt's `apps/api` to `apps/backend`, because the bot shares the API's Python core. A `supabase/` migrations folder is not used: Alembic owns the schema. There is no `docker-compose.yml` (D-31), no `docs/deployment/` and no `SECURITY.md` or `CONTRIBUTING.md`.
 
-## Deployment (D-05)
+## How it runs (D-05, D-31)
 
 ```mermaid
 flowchart LR
     subgraph Laptop
-        S[scripts/start.ps1] --> W[web :3000]
-        S --> A[api :8000 localhost only]
-        S --> B[bot + worker]
+        S[scripts/start.ps1] --> W[web :3000 or -WebPort]
+        S --> A[api 127.0.0.1:API_PORT<br/>default 8000, 8010 on the dev PC, D-27]
+        S --> B[bot + reminder and outbox jobs]
     end
     W --> A
-    A --> SB[(Supabase dev project)]
+    A --> SB[(Supabase project<br/>session pooler eu-west-3)]
     B --> SB
     B --> TG[Telegram]
     B --> GM[Gemini]
-    subgraph CI [GitHub Actions]
-        L[lint + types] --> U[unit tests] --> I[integration tests<br/>ephemeral Postgres service] --> E[web build + Playwright]
-        M[migration up/down/up] 
-        SEC[pip-audit, npm audit, secret scan]
+    subgraph CI [GitHub Actions: ci.yml]
+        BE[backend: ruff check + format, mypy,<br/>alembic upgrade clinic_test, pytest unit + integration,<br/>pip-audit, postgres:17 service container]
+        FE[web: eslint, tsc, vitest, next build,<br/>npm audit --omit=dev]
     end
 ```
 
-- Long polling needs no public URL, which suits a laptop demo. Webhook mode, for a future cloud deployment, is described in `docs/deployment/` (needs public HTTPS).
-- The evaluation suite needs the Gemini key, so in CI it runs only on manual dispatch with a repository secret.
-- Backups: the Supabase Free plan includes **no automatic backups** (supabase.com/pricing, verified 2026-11-02). The runbook documents `pg_dump` export and restore; paid plans add daily backups.
+- `scripts/start.ps1` builds the dashboard when needed (`-Rebuild` forces it, `-Dev` runs `next dev` instead, D-39), starts the API, the bot and the dashboard in the background, waits for `/readyz`, the dashboard and the first scheduler heartbeat (limit `-TimeoutSeconds`, default 120), writes logs and PIDs to `logs/`, and stops what it started if anything fails. `-NoBot` starts the API and dashboard only. `scripts/restart.ps1 -Part api|bot` restarts one part; `scripts/stop.ps1` stops everything.
+- CI runs the migration up/down/up check inside pytest (`tests/integration/test_migrations.py`). **Not in CI:** the Playwright E2E specs, the evaluation suite and the live tests (pytest deselects `live` and `eval` by default, `pyproject.toml`), and secret scanning (SEC-SCAN-01 was a one-off scan before the first push).
+- Long polling needs no public URL, which suits a laptop demo (D-18). **A webhook mode is not built or documented** (it would need public HTTPS).
+- Backups: the Supabase Free plan includes **no automatic backups** (supabase.com/pricing, checked 2026-11-02). **No backup or restore procedure is documented yet**; the runbook does not cover it.
 
-## Platform facts and pinned choices (verified 2026-11-02)
+## Platform facts and pinned choices
 
-Versions were read live from PyPI and npm. Behaviour comes from official docs; each row cites its source. These are the versions the scaffold starts from. The lockfiles (`uv.lock`, `package-lock.json`) become the reproducible source of truth.
+Checked on 2026-11-02 against PyPI, npm and the official docs cited in each row, and updated on 2026-11-05 where the build changed a choice. The lockfiles (`uv.lock`, `package-lock.json`) are the reproducible source of truth for versions.
 
-| Topic | Verified fact | Design consequence | Source |
+| Topic | Fact | Design consequence | Source |
 |---|---|---|---|
-| Python | 3.14.3 installed. cp314 Windows wheels exist for sqlalchemy 2.1.6, asyncpg 0.32.0, psycopg-binary 3.3.6, pydantic-core; pure wheels with 3.14 classifiers for fastapi 0.162.0, alembic 1.20.1, python-telegram-bot 22.8, apscheduler 3.11.3, structlog 26.1.0, pytest 9.2.0 | Target **Python 3.14** (D-14). httpx 0.28.1 declares classifiers only up to 3.12 (pure Python; checked by our test run) | pypi.org/project/&lt;name&gt; |
-| Gemini SDK | `google-genai` 2.34.0, Python ≥ 3.11. Async via `client.aio.models.generate_content`. Manual function calling: `types.FunctionDeclaration(parameters_json_schema=…)`, `AutomaticFunctionCallingConfig(disable=True)`, read `response.function_calls`, reply with `Part.from_function_response` | Matches the planned plain loop (AGT-14) | github.com/googleapis/python-genai |
-| Gemini models | Stable models with function calling: `gemini-3.8-flash`, `gemini-3.5-flash-lite` (the latter positioned for high-volume agentic use where latency and cost dominate). Both are free of charge on the free tier | Model is an env setting (`GEMINI_MODEL`). Default `gemini-3.5-flash-lite` (D-13, D-38). A switch to `gemini-3.5-flash` (D-37) was reverted within the hour: its free tier allows only 20 requests per day | ai.google.dev/gemini-api/docs/models, /pricing |
-| Gemini free tier | Content is used to improve products; human reviewers may read it; "Do not submit sensitive, confidential, or personal information to the Unpaid Services." Rate limits are shown only in AI Studio, per project | **No patient identity is sent to the LLM** (D-16). The free tier is limited to synthetic-data development and evaluation. Any pilot with real patients requires the paid tier and a DPDP review. Quota may limit eval runs (risk R-GEM-01) | ai.google.dev/gemini-api/terms, /docs/rate-limits |
-| Telegram | PTB 22.8; `[job-queue]` extra brings APScheduler `>=3.10.4,<3.12` (AsyncIOScheduler); `callback_data` 1–64 bytes; `Contact.user_id` is optional | Reminder job uses PTB JobQueue, i.e. APScheduler (BRD §3.7). Callback tokens ≤ 64 bytes. Contact check: `user_id is not None and == sender` | docs.python-telegram-bot.org; core.telegram.org/bots/api |
-| Supabase connectivity | Direct connections are IPv6-only without the IPv4 add-on. The shared pooler is IPv4 on every plan: session mode on port 5432, transaction mode on 6543. Transaction mode does not support prepared statements. Custom roles connect as `role.[project-ref]` | Connect through the **session-mode pooler** with **psycopg 3 async** (`prepare_threshold=None`, which also works in transaction mode) (D-15) | supabase.com/docs/guides/database/connecting-to-postgres; psycopg.org |
-| Supabase security | `public` is exposed through the Data API by default; the Data API can be disabled; custom LOGIN roles can be created; `postgres` has BYPASSRLS | Tables in schema `clinic`; **turn the Data API off** (we don't use it); app connects as `clinic_app`, which has no BYPASSRLS | supabase.com/docs/guides/database/hardening-data-api, /postgres/roles |
-| Supabase Free plan | 2 active projects; paused after 1 week of inactivity; **no automatic backups**; 500 MB database | **One project** with schemas `clinic` (dev) and `clinic_test` (tests), each with its own role (D-17). The backup runbook uses `pg_dump` (needs PostgreSQL client tools, not installed here) | supabase.com/pricing, /docs/guides/platform/backups |
-| Next.js | 16.4.3; `middleware` was renamed to `proxy.ts` in v16 | Same-origin API via `rewrites` in `next.config`; `proxy.ts` only for an optimistic redirect to `/login` | npm; nextjs.org/docs/app/api-reference/file-conventions/proxy |
-| UI libs | Tailwind 4.3.3; shadcn CLI 4.x initialises Tailwind v4 + React 19; `tw-animate-css` replaces `tailwindcss-animate`; TanStack Query 5.105.1 | Use as listed | npm; ui.shadcn.com/docs/tailwind-v4 |
+| Python | 3.14.3 installed; cp314 wheels exist for the compiled dependencies | Python 3.14 (D-14); `requires-python = ">=3.14"` | pypi.org |
+| Gemini SDK | `google-genai` 2.34.0. Async via `client.aio.models.generate_content`; manual function calling with `FunctionDeclaration(parameters_json_schema=…)` and `AutomaticFunctionCallingConfig(disable=True)` | The plain loop of AGT-14 (`agent/llm.py`, `agent/loop.py`). Gemini 3 models reject a follow-up whose history drops the thought signatures, so model turns are replayed from the provider's raw content (checked 2026-11-03, `agent/llm.py`) | github.com/googleapis/python-genai |
+| Gemini models | `gemini-3.5-flash-lite` and `gemini-3.8-flash` are stable with function calling and free of charge on the free tier | `GEMINI_MODEL` setting, default `gemini-3.5-flash-lite` (D-13, D-38). A switch to `gemini-3.5-flash` (D-37) was reverted the same day because its free tier allows 20 requests per day | ai.google.dev/gemini-api/docs/models, /pricing |
+| Gemini free tier | Content may be used to improve products and read by human reviewers; "Do not submit sensitive, confidential, or personal information to the Unpaid Services." Daily limits are per project and per model: 500 requests per day for `gemini-3.5-flash-lite` (read from the API's 429 reply, QUOTA-01) | **No patient identity is sent to the model** (D-16); free tier only with synthetic data. The bot and the evaluation suite share the 500-request daily quota (acceptance report) | ai.google.dev/gemini-api/terms; QUOTA-01, QUOTA-02 |
+| Telegram | PTB 22.8; the `[job-queue]` extra brings APScheduler (3.11.3 locked); `callback_data` 1–64 bytes; `Contact.user_id` is optional | Jobs run on PTB's job queue (BRD §3.7 asks for APScheduler). Callback data stays within 64 bytes (`tests/unit/test_pending.py`). Contact check: `contact_user_id is not None and == sender` | docs.python-telegram-bot.org; core.telegram.org/bots/api |
+| Supabase connectivity | The direct host is IPv6-only and did not resolve on the dev PC (D-15a). The shared pooler is IPv4: session mode on 5432, transaction mode on 6543 (no prepared statements). Custom roles log in as `role.<project-ref>` | **Session-mode pooler** with **asyncpg** (D-25, which replaced the psycopg plan of D-15 because psycopg cannot use Windows' default event loop). Session mode keeps one backend per client, so asyncpg's prepared statements are safe. Host `aws-1-eu-west-3.pooler.supabase.com` (D-23) | supabase.com/docs/guides/database/connecting-to-postgres |
+| Database TLS | `ssl="require"` encrypts but does not verify the server | verify-full (CA + hostname, TLS ≥ 1.2) when `DB_SSL_ROOT_CERT` is set; production refuses to start without it (D-26, `db/session.py`). The CA is not yet installed on the dev PC, so dev runs use unverified TLS (BLK-05) | security review |
+| Supabase security | `public` is exposed through the Data API by default; the Data API can be disabled; custom LOGIN roles can be created; `postgres` has BYPASSRLS | Tables in schema `clinic`; the Data API is turned off for the project (D-17; a setup step, not checked by any test); the app connects as `clinic_app`, which has no BYPASSRLS | supabase.com/docs/guides/database/hardening-data-api, /postgres/roles |
+| Supabase Free plan | 2 active projects; paused after 1 week of inactivity; no automatic backups; 500 MB database | **One project** with schemas `clinic` (dev) and `clinic_test` (tests), each with its own role (D-17) | supabase.com/pricing |
+| Next.js | `middleware` was renamed to `proxy.ts` in v16; pinned 16.4.4 | Same-origin API via `rewrites` in `next.config.ts`; `proxy.ts` only for the optimistic redirect to `/login` | nextjs.org/docs/app/api-reference/file-conventions/proxy |
+| UI libraries | Tailwind 4.3.4; shadcn/ui on Tailwind v4 and React 19; `tw-animate-css` replaces `tailwindcss-animate`; TanStack Query 5.105.3 | As listed in `apps/web/package.json` | npm; ui.shadcn.com/docs/tailwind-v4 |
 
-Not verified (to be checked at setup): `btree_gist` on hosted Supabase (`select * from pg_available_extensions where name='btree_gist'`); prepared-statement behaviour in session mode; pooler connection limits on the Free plan (the concurrency test needs about 10 connections); Gemini free-tier RPM/RPD for the user's project.
+Checked later: `btree_gist` 1.7 is available on the project and installed into schema `extensions` (`infrastructure/db/bootstrap.sql`), so the exclusion constraint exists; the concurrency test with 10 parallel bookings passes through the pooler (`test_ten_parallel_bookings_for_one_slot_create_exactly_one`). **Not verified:** the Free plan's pooler connection limit, and the Gemini free tier's per-minute limit for this project.
 
 ## Cross-cutting concerns
 
 | Concern | Approach | Source |
 |---|---|---|
-| Configuration | `pydantic-settings` reads `.env`; validated at startup, fail fast; `.env.example` lists every key with dummy values | NFR-03, E7-S1-AC2 |
-| Logging | JSON structured logs with request_id, actor, action and latency; no message text, phone or name in logs | NFR-11, NFR-06 |
-| Audit | `audit_log` is append-only, written by the service layer for every tool call and staff write | FR-10, E7-S2 |
-| Time | UTC in storage; clinic time zone from settings for slots and display; `zoneinfo` | A7 |
-| Errors | Typed domain errors → result codes → API envelope, or a patient-friendly message | MP §11 |
-| Timeouts/retries | Gemini call with ≈ 8 s budget; Telegram sends retried 3× with exponential backoff; DB statement timeout | E1-S1-AC3, E4-S1-AC4 |
-| Health | `/healthz`, `/readyz`; bot logs a heartbeat each scheduler run | MP §9 |
+| Configuration | `pydantic-settings` reads the repository-root `.env` (`config.py`); validated at startup (time zone, schema separation, turn budget ≥ model-call timeout); `.env.example` lists every key with dummy values | NFR-03, E7-S1-AC2 |
+| Logging | JSON lines via structlog with `request_id`; the keys `phone`, `full_name`, `name`, `text`, `message`, `token`, `password`, `api_key`, `authorization`, `cookie` are replaced by `[redacted]` (`observability.py`); `httpx` request logging is silenced because Telegram URLs carry the bot token; the API logs the path without the query string | NFR-11, NFR-06 |
+| Audit | `audit_log` is append-only (trigger + revoked UPDATE/DELETE), written for every tool call, staff write, login, lockout and logout; arguments are checked so they never contain `text`, `message`, `name`, `phone` or `full_name` (`services/audit.py`) | FR-10, E7-S2, GAP-18 |
+| Time | UTC in storage; the clinic time zone from `clinic_settings` for slots, dates and display labels; the dashboard takes "today" from `GET /api/v1/clinic/today` (D-40) | A7 |
+| Errors | Result codes from the services map to the API error envelope (`api/errors.py`) or to a patient-friendly message; any unexpected error gets a fallback reply with the clinic phone number (`conversation/service.py` `_guarded`) | MP §11 |
+| Timeouts and retries | Model call 8 s, whole turn 25 s (D-34); reminder sends: first attempt plus 3 retries after 2, 4 and 8 s; notices: 3 attempts, waiting 1 and then 5 minutes; database: connect 10 s, command 15 s, pool checkout 10 s, and role settings `statement_timeout = 10s`, `idle_in_transaction_session_timeout = 30s` (`bootstrap.sql`); readiness probe 5 s; dashboard requests 15 s | E1-S1-AC3, E4-S1-AC4 |
+| Health | `GET /healthz` (process up) and `GET /readyz` (database answers within 5 s, else 503); the bot logs `scheduler_heartbeat` on every reminder run | MP §9 |
