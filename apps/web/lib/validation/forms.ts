@@ -113,6 +113,20 @@ export const faqFormSchema = z.object({
 export type FaqForm = z.infer<typeof faqFormSchema>;
 
 export const STAFF_PASSWORD_MIN = 12;
+const staffPassword = z
+  .string()
+  .min(STAFF_PASSWORD_MIN, { message: `Use at least ${STAFF_PASSWORD_MIN} characters` })
+  .max(128, { message: "Keep the password under 128 characters" });
+const passwordsMatch = {
+  check: (v: { password: string; confirmPassword: string }) => v.password === v.confirmPassword,
+  error: { path: ["confirmPassword"], message: "The two passwords don't match" },
+};
+
+export const staffPasswordResetSchema = z
+  .object({ password: staffPassword, confirmPassword: z.string() })
+  .refine(passwordsMatch.check, passwordsMatch.error);
+export type StaffPasswordResetForm = z.infer<typeof staffPasswordResetSchema>;
+
 export const staffCreateSchema = z
   .object({
     display_name: z.string().trim().min(1, { message: "Enter the person's name" }).max(80, { message: "Keep it under 80 characters" }),
@@ -123,16 +137,10 @@ export const staffCreateSchema = z
       .max(40, { message: "Keep the username under 40 characters" })
       .regex(/^\S+$/, { message: "Usernames can't contain spaces" }),
     role: z.enum(["receptionist", "admin"], { error: "Choose a role" }),
-    password: z
-      .string()
-      .min(STAFF_PASSWORD_MIN, { message: `Use at least ${STAFF_PASSWORD_MIN} characters` })
-      .max(128, { message: "Keep the password under 128 characters" }),
+    password: staffPassword,
     confirmPassword: z.string(),
   })
-  .refine((v) => v.password === v.confirmPassword, {
-    path: ["confirmPassword"],
-    message: "The two passwords don't match",
-  });
+  .refine(passwordsMatch.check, passwordsMatch.error);
 export type StaffCreateForm = z.infer<typeof staffCreateSchema>;
 
 export function isValidTimeZone(value: string): boolean {

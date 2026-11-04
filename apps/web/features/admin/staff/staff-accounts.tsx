@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, LoaderCircle, Lock, LockOpen, Power, UserPlus, Users } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LoaderCircle, Lock, LockOpen, Power, UserPlus, Users } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
@@ -22,7 +22,13 @@ import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { StaffUser } from "@/lib/api/schemas";
 import { queryKeys } from "@/lib/query";
 import { useSession } from "@/lib/session";
-import { STAFF_PASSWORD_MIN, staffCreateSchema, type StaffCreateForm } from "@/lib/validation/forms";
+import {
+  STAFF_PASSWORD_MIN,
+  staffCreateSchema,
+  staffPasswordResetSchema,
+  type StaffCreateForm,
+  type StaffPasswordResetForm,
+} from "@/lib/validation/forms";
 
 const ROLE_LABEL = { receptionist: "Receptionist", admin: "Clinic admin" } as const;
 
@@ -155,6 +161,101 @@ function CreateStaffDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   );
 }
 
+function ResetPasswordDialog({ user, onClose }: { user: StaffUser | null; onClose: () => void }) {
+  const notify = useToast();
+  const [showPassword, setShowPassword] = useState(false);
+  const empty: StaffPasswordResetForm = { password: "", confirmPassword: "" };
+  const form = useForm<StaffPasswordResetForm>({ resolver: zodResolver(staffPasswordResetSchema), defaultValues: empty });
+
+  const reset = useMutation({
+    mutationFn: (values: StaffPasswordResetForm) => updateStaffUser(user?.id ?? "", { password: values.password }),
+    onSuccess: (updated) => {
+      notify({ tone: "success", title: "Password changed", description: `${updated.display_name} is signed out everywhere and must use the new password.` });
+      form.reset(empty);
+      onClose();
+    },
+    onError: (error) => applyApiFieldErrors(error, form.setError, { password: "password" }),
+  });
+
+  const e = form.formState.errors;
+  return (
+    <Dialog
+      open={user !== null}
+      onOpenChange={(next) => {
+        if (reset.isPending || next) return;
+        reset.reset();
+        form.reset(empty);
+        setShowPassword(false);
+        onClose();
+      }}
+    >
+      <DialogContent>
+        <form noValidate onSubmit={form.handleSubmit((values) => reset.mutate(values))} className="space-y-5">
+          <DialogHeader>
+            <DialogTitle>Set a new password for {user?.display_name}</DialogTitle>
+            <DialogDescription>
+              They are signed out on every device and must sign in with the new password. Give it to them in person, not by message.
+            </DialogDescription>
+          </DialogHeader>
+          <FieldGroup>
+            <Field data-invalid={!!e.password}>
+              <FieldLabel htmlFor="reset-password">New password</FieldLabel>
+              <div className="relative">
+                <Input
+                  id="reset-password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  className="pr-12"
+                  aria-invalid={!!e.password}
+                  {...form.register("password")}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="absolute top-0.5 right-0.5"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? <EyeOff aria-hidden /> : <Eye aria-hidden />}
+                </Button>
+              </div>
+              <FieldDescription>At least {STAFF_PASSWORD_MIN} characters.</FieldDescription>
+              <FieldError errors={[e.password]} />
+            </Field>
+            <Field data-invalid={!!e.confirmPassword}>
+              <FieldLabel htmlFor="reset-password-confirm">Type the new password again</FieldLabel>
+              <Input
+                id="reset-password-confirm"
+                type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                aria-invalid={!!e.confirmPassword}
+                {...form.register("confirmPassword")}
+              />
+              <FieldError errors={[e.confirmPassword]} />
+            </Field>
+          </FieldGroup>
+          <InlineError
+            error={reset.error}
+            title="The password was not changed"
+            fieldsMarked={matchApiFields(reset.error, { password: "password" }).length > 0}
+          />
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={reset.isPending} onClick={onClose}>
+              Close without saving
+            </Button>
+            <Button type="submit" disabled={reset.isPending}>
+              {reset.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <KeyRound aria-hidden />}
+              Set new password
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type PendingAction = { kind: "toggle" | "unlock"; user: StaffUser } | null;
 
 /** Whole minutes until a lockout ends, or null when the account is not locked (E6-S1-AC3). */
@@ -189,6 +290,7 @@ export function StaffAccounts() {
   const users = useQuery({ queryKey: queryKeys.staffUsers, queryFn: ({ signal }) => getStaffUsers(signal) });
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState<PendingAction>(null);
+  const [resetting, setResetting] = useState<StaffUser | null>(null);
 
   const act = useMutation({
     mutationFn: (action: NonNullable<PendingAction>) =>
@@ -264,6 +366,17 @@ export function StaffAccounts() {
                           Unlock
                         </Button>
                       ) : null}
+                      {user.active && user.id !== me ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Set a new password for ${user.display_name}`}
+                          onClick={() => setResetting(user)}
+                        >
+                          <KeyRound aria-hidden />
+                          New password
+                        </Button>
+                      ) : null}
                       {user.id !== me ? (
                         <Button variant="ghost" size="sm" onClick={() => setPending({ kind: "toggle", user })}>
                           <Power aria-hidden />
@@ -280,6 +393,7 @@ export function StaffAccounts() {
       )}
 
       <CreateStaffDialog open={creating} onOpenChange={setCreating} />
+      <ResetPasswordDialog user={resetting} onClose={() => setResetting(null)} />
 
       <ConfirmDialog
         open={pending !== null}
