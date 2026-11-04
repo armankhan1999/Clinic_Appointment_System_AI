@@ -33,3 +33,6 @@ Thumbs.db
 
 # Claude Code local state (agent worktrees)
 .claude/
+
+# Process logs and pid file from scripts/start.ps1
+logs/

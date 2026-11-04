@@ -6,7 +6,7 @@ A Telegram assistant that lets patients of a single clinic register, find doctor
 |---|---|---|
 | Telegram bot | `uv run clinic-bot` | Long-polls Telegram; consent-first registration; Gemini tool-calling agent |
 | Staff API | `uv run clinic-api` | FastAPI on `127.0.0.1:%API_PORT%` (default 8000): `/healthz`, `/readyz`, `/api/v1/*` |
-| Dashboard | *(Milestone 5)* | Next.js staff UI |
+| Dashboard | `npm run start` (from `apps/web`, after `npm run build`) | Next.js staff UI; `/api/v1/*` is rewritten to the API |
 
 Design: [`docs/architecture/`](docs/architecture/README.md) · threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md) · decisions: [`docs/tracking/decision-log.md`](docs/tracking/decision-log.md).
 
@@ -36,15 +36,44 @@ uv sync
 uv run alembic -x schema=clinic upgrade head
 uv run alembic -x schema=clinic_test upgrade head
 uv run python scripts/seed.py --target dev
+
+# 5. Create the first admin account (the password is typed twice and never shown)
+uv run python scripts/create_admin.py --target dev --username owner --display-name "Clinic Owner"
 ```
 
 ## Run
+
+One command starts the API, the Telegram bot with its reminder scheduler, and the dashboard. It builds the
+dashboard when needed, waits until every part answers (limit 2 minutes), and writes logs to `logs\`:
+
+```powershell
+pwsh scripts/start.ps1               # dashboard on http://localhost:3000
+pwsh scripts/start.ps1 -WebPort 3100 # if port 3000 is taken (it is on the original dev PC)
+pwsh scripts/start.ps1 -NoBot        # API and dashboard only
+pwsh scripts/stop.ps1                # stops everything start.ps1 started
+```
+
+Or run each part in its own terminal:
 
 ```powershell
 Set-Location apps/backend
 uv run clinic-api     # terminal 1
 uv run clinic-bot     # terminal 2, then message your bot in Telegram and send /start
 ```
+
+If the model is unreachable, the bot answers with a short "try again" message and the clinic phone number
+instead of failing (E7-S6-AC2).
+
+## Tests
+
+```powershell
+Set-Location apps/backend
+uv run pytest                      # unit + integration (clinic_test schema); live and eval tests are opt-in
+uv run pytest -m live              # real Gemini and Telegram smoke tests
+uv run pytest -m eval tests/integration/test_agent_eval.py   # 35-scenario agent evaluation -> reports/eval-*.md
+```
+
+Integration, live and evaluation runs share the `clinic_test` schema: run them one at a time.
 
 ## Dashboard
 
