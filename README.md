@@ -113,7 +113,7 @@ Integration tests need the `.env` database settings; they never touch the `clini
 | `DB_HOST` | Must be the Supabase **session pooler** (`aws-N-<region>.pooler.supabase.com`, port 5432). The direct host is IPv6-only (D-15a). |
 | `DB_SSL_ROOT_CERT` | Path to the Supabase CA (`prod-ca-2021.crt`, Dashboard → Database Settings → SSL Configuration). Enables certificate verification; **required in production**. Without it, dev/test use encrypted but unverified TLS and log a warning. |
 | `API_PORT` | Change it if port 8000 is taken (it is on the original dev PC, so `.env` uses 8010). |
-| `GEMINI_MODEL` | `gemini-3.5-flash` by default (D-37; `gemini-3.5-flash-lite` until 2026-11-05, D-13). The free tier may use prompts for training, so only synthetic data is used and the model never receives patient identity (D-16). |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` by default (D-13, D-38). Free-tier daily limits are per project and per model (500 requests/day for this model, 20 for `gemini-3.5-flash`) and reset at midnight Pacific time. The free tier may use prompts for training, so only synthetic data is used and the model never receives patient identity (D-16). |
 
 ## Troubleshooting
 

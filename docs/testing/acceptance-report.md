@@ -121,8 +121,12 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
   invalidated by a network outage on this PC. To do after the quota resets: `EVAL_RUNS=2` at production settings.
 - **New checks with genuine evidence:** XA-02 known FAQ answer and XA-03 refusal shape (AEV-DIAG-04); BK-01 with
   the date said back and every time grounded (AEV-DIAG-05). XA-01 (unknown specialty) has no genuine pass yet.
-- **Recommendation:** give the evaluation suite its own Gemini project or key, or a paid tier, so evaluation runs
-  can never use up the live bot's daily requests.
+- **Recommendation:** run the evaluation suite in its own Google Cloud project (limits apply per project, not per
+  API key, so a second key in the same project does not help), or use a paid tier, so evaluation runs can never
+  use up the live bot's daily requests.
+- **Model switch attempt (D-37, reverted by D-38):** `gemini-3.5-flash` answered probes in 1.5–1.6 s but its free
+  tier allows only **20 requests per day** (QUOTA-02); the probes and the first evaluation calls used them up. Both
+  models reset at midnight Pacific time (13:30 IST). Free-tier limits per model are shown only in AI Studio.
 
 ## Non-functional requirements
 
@@ -145,7 +149,7 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
 | Item | Owner |
 |---|---|
 | Reply time: option A is in place (D-34); the remaining failures need option C (model latency) and benefit from B | Arman |
-| Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate project or key for evaluations, or a paid tier | Arman |
+| Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate Google Cloud project for evaluations (limits are per project, not per key), or a paid tier | Arman |
 | Run the final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets | Claude / Arman |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
 | BLK-06: a person taps through registration, booking and reminders in Telegram | Arman |

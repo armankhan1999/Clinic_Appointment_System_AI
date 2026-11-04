@@ -43,7 +43,7 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 | SEC-ROT | Rotate the database password, Gemini key and bot token that were shared in chat | Arman | 2026-11-03 |
 | D-33 | ~~`cn@0.5.2`~~ Resolved: replaced by `clsx` 2.1.1 + `tailwind-merge` 3.7.0 | — | 2026-11-04 |
 | PR-1 | Review and merge PR #1 (`feat/m6-quality-e2e` → `main`); CI green on the PR | Arman | 2026-11-04 |
-| QUOTA | Gemini free tier: 500 requests/day per model (QUOTA-01, verified from the API's 429), shared by the live bot and the evaluation suite; used up on 2026-11-04 by evaluation runs. Use a separate project/key for evaluations or a paid tier | Arman | 2026-11-04 |
+| QUOTA | Gemini free tier: 500 requests/day per model (QUOTA-01, verified from the API's 429), shared by the live bot and the evaluation suite; used up on 2026-11-04 by evaluation runs. Use a separate Google Cloud project for evaluations (limits are per project, not per key) or a paid tier; `gemini-3.5-flash` allows only 20/day (QUOTA-02, D-38) | Arman | 2026-11-04 |
 | EVAL-FINAL | Final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets (~13:30 IST 2026-11-05) | Claude | 2026-11-04 |
 
 Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (QUOTA-01), BLK-04 Telegram token.
