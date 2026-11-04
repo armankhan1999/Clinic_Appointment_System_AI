@@ -21,8 +21,9 @@ test.describe("sign-in (E6-S1)", () => {
     const me = (await (await page.request.get("/api/v1/auth/me")).json()) as { user: { display_name: string; role: string } };
     expect(me.user.role).toBe("receptionist");
     await openNav(page);
-    await expect(page.getByText(me.user.display_name, { exact: true })).toBeVisible();
-    await expect(page.getByText("Receptionist", { exact: true })).toBeVisible();
+    // On tablet widths the desktop sidebar stays in the DOM, hidden by CSS; check what the user can see.
+    await expect(page.getByText(me.user.display_name, { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByText("Receptionist", { exact: true }).filter({ visible: true })).toBeVisible();
   });
 
   // A wrong password for a real account is checked in lockout.spec.ts on a throwaway account, so the shared
