@@ -197,7 +197,8 @@ export const getStaffUsers = (signal?: AbortSignal) =>
 export const createStaffUser = (input: { username: string; display_name: string; role: Role; password: string }) =>
   apiRequest("/staff-users", staffUserSchema, { method: "POST", body: input });
 
-export const updateStaffUser = (id: string, input: { display_name?: string; role?: Role; active?: boolean }) =>
+/** A `password` resets it and signs the user out everywhere (IMP-04). */
+export const updateStaffUser = (id: string, input: { display_name?: string; role?: Role; active?: boolean; password?: string }) =>
   apiRequest(`/staff-users/${encodeURIComponent(id)}`, staffUserSchema, { method: "PATCH", body: input });
 
 export const unlockStaffUser = (id: string) =>

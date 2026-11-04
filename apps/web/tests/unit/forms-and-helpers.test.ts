@@ -13,6 +13,7 @@ import {
   parsePhrases,
   settingsFormSchema,
   staffCreateSchema,
+  staffPasswordResetSchema,
 } from "@/lib/validation/forms";
 
 describe("safeNextPath (open-redirect guard)", () => {
@@ -134,6 +135,13 @@ describe("form schemas", () => {
     const mismatch = staffCreateSchema.safeParse({ ...base, password: "long-enough-pass", confirmPassword: "long-enough-pas" });
     expect(mismatch.error?.issues[0].path).toEqual(["confirmPassword"]);
     expect(staffCreateSchema.safeParse({ ...base, password: "long-enough-pass", confirmPassword: "long-enough-pass" }).success).toBe(true);
+  });
+
+  it("applies the same password rules to a reset", () => {
+    expect(staffPasswordResetSchema.safeParse({ password: "short-pass1", confirmPassword: "short-pass1" }).success).toBe(false);
+    const mismatch = staffPasswordResetSchema.safeParse({ password: "long-enough-pass", confirmPassword: "long-enough-pas" });
+    expect(mismatch.error?.issues[0].path).toEqual(["confirmPassword"]);
+    expect(staffPasswordResetSchema.safeParse({ password: "long-enough-pass", confirmPassword: "long-enough-pass" }).success).toBe(true);
   });
 
   it("requires a leave reason of 1–200 characters (POST /doctors/{id}/leaves refuses an empty one)", () => {
