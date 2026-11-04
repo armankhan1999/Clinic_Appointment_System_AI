@@ -16,14 +16,22 @@
 .PARAMETER Rebuild
     Rebuild the dashboard even when an up-to-date build exists.
 
+.PARAMETER Dev
+    Live development: the API restarts when backend code changes and the dashboard runs `next dev`,
+    so edits appear in the browser at once (no build). Not for demos or production.
+
 .EXAMPLE
     pwsh scripts/start.ps1 -WebPort 3100
+
+.EXAMPLE
+    pwsh scripts/start.ps1 -WebPort 3100 -Dev
 #>
 [CmdletBinding()]
 param(
     [ValidateRange(1024, 65535)][int]$WebPort = 3000,
     [switch]$NoBot,
     [switch]$Rebuild,
+    [switch]$Dev,
     [ValidateRange(30, 600)][int]$TimeoutSeconds = 120
 )
 
@@ -60,7 +68,8 @@ $clock = [System.Diagnostics.Stopwatch]::StartNew()
 # The API port is baked into the dashboard build (next.config rewrites), so rebuild when it changes.
 $buildMarker = Join-Path $web '.next/clinic-api-port'
 $builtFor = if (Test-Path $buildMarker) { (Get-Content $buildMarker -Raw).Trim() } else { '' }
-if ($Rebuild -or -not (Test-Path (Join-Path $web '.next/BUILD_ID')) -or $builtFor -ne "$apiPort") {
+$env:API_PORT = "$apiPort"  # read by next.config for the /api/v1 rewrite (dev server and build)
+if (-not $Dev -and ($Rebuild -or -not (Test-Path (Join-Path $web '.next/BUILD_ID')) -or $builtFor -ne "$apiPort")) {
     Write-Host "Building the dashboard for API port $apiPort ..."
     $env:API_PORT = "$apiPort"
     Push-Location $web
@@ -87,15 +96,20 @@ function Stop-Started {
 
 function Test-Http([string]$Url) {
     try { (Invoke-WebRequest -Uri $Url -TimeoutSec 10 -SkipHttpErrorCheck).StatusCode -eq 200 }
-    catch [System.Net.Http.HttpRequestException] { $false }
+    # Refused connections and probe timeouts (a dev server compiling its first page) both mean 'not ready yet'.
+    catch [System.Net.Http.HttpRequestException], [System.Threading.Tasks.TaskCanceledException], [System.TimeoutException] {
+        $false
+    }
 }
 
 $uv = (Get-Command uv).Source
 $node = (Get-Command node).Source
 $parts = [ordered]@{}
-$parts.api = Start-Part 'api' $backend $uv @('run', 'clinic-api')
+$apiArgs = if ($Dev) { @('run', 'clinic-api', '--reload') } else { @('run', 'clinic-api') }
+$parts.api = Start-Part 'api' $backend $uv $apiArgs
 if (-not $NoBot) { $parts.bot = Start-Part 'bot' $backend $uv @('run', 'clinic-bot') }
-$parts.web = Start-Part 'web' $web $node @('node_modules/next/dist/bin/next', 'start', '-p', "$WebPort")
+$nextMode = if ($Dev) { 'dev' } else { 'start' }
+$parts.web = Start-Part 'web' $web $node @('node_modules/next/dist/bin/next', $nextMode, '-p', "$WebPort")
 
 $checks = [ordered]@{
     api = { Test-Http "http://127.0.0.1:$apiPort/readyz" }
@@ -108,6 +122,7 @@ if (-not $NoBot) {
 }
 
 $ready = @{}
+try {
 while ($clock.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
     foreach ($name in @($checks.Keys)) {
         if ($ready.ContainsKey($name)) { continue }
@@ -123,6 +138,12 @@ while ($clock.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
     if ($ready.Count -eq $checks.Count) { break }
     Start-Sleep -Seconds 2
 }
+}
+catch {
+    # Never leave half-started servers behind.
+    Stop-Started
+    throw
+}
 
 if ($ready.Count -ne $checks.Count) {
     $missing = @($checks.Keys | Where-Object { -not $ready.ContainsKey($_) }) -join ', '
@@ -131,7 +152,7 @@ if ($ready.Count -ne $checks.Count) {
 }
 
 Write-Host ''
-Write-Host ("Stack up in {0:N1} s." -f $clock.Elapsed.TotalSeconds)
+Write-Host ("Stack up in {0:N1} s{1}." -f $clock.Elapsed.TotalSeconds, $(if ($Dev) { ' in live development mode' } else { '' }))
 Write-Host "  Dashboard: http://localhost:$WebPort"
 Write-Host "  API:       http://127.0.0.1:$apiPort (health: /healthz, readiness: /readyz)"
 if (-not $NoBot) { Write-Host '  Bot:       long polling, reminder jobs every 5 min, outbox every 1 min' }
