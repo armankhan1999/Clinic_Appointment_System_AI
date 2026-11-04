@@ -122,8 +122,15 @@ const staffPassword = z
   .string()
   .min(STAFF_PASSWORD_MIN, { message: `Use at least ${STAFF_PASSWORD_MIN} characters` })
   .max(128, { message: "Keep the password under 128 characters" });
-const passwordsMatch = (v: { password: string; confirmPassword: string }) => v.password === v.confirmPassword;
-const PASSWORD_MISMATCH = { path: ["confirmPassword"], message: "The two passwords don't match" };
+const passwordsMatch = {
+  check: (v: { password: string; confirmPassword: string }) => v.password === v.confirmPassword,
+  error: { path: ["confirmPassword"], message: "The two passwords don't match" },
+};
+
+export const staffPasswordResetSchema = z
+  .object({ password: staffPassword, confirmPassword: z.string() })
+  .refine(passwordsMatch.check, passwordsMatch.error);
+export type StaffPasswordResetForm = z.infer<typeof staffPasswordResetSchema>;
 
 export const staffCreateSchema = z
   .object({
@@ -138,12 +145,8 @@ export const staffCreateSchema = z
     password: staffPassword,
     confirmPassword: z.string(),
   })
-  .refine(passwordsMatch, PASSWORD_MISMATCH);
+  .refine(passwordsMatch.check, passwordsMatch.error);
 export type StaffCreateForm = z.infer<typeof staffCreateSchema>;
-
-/** IMP-04 password reset: PATCH /staff-users/{id} { password }, same rules as a new account. */
-export const staffPasswordResetSchema = z.object({ password: staffPassword, confirmPassword: z.string() }).refine(passwordsMatch, PASSWORD_MISMATCH);
-export type StaffPasswordResetForm = z.infer<typeof staffPasswordResetSchema>;
 
 export function isValidTimeZone(value: string): boolean {
   try {

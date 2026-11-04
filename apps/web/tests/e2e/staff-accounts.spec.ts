@@ -44,18 +44,31 @@ test("admin creates a staff account, a weak password is refused, the password is
     await expect(row).toContainText("Active");
     expect(await staffAccount(page, username)).toMatchObject({ display_name: displayName, role: "receptionist", active: true });
 
-    await row.getByRole("button", { name: `Reset password for ${displayName}` }).click();
-    const reset = page.getByRole("dialog", { name: `Reset password for ${displayName}` });
-    await expect(reset).toContainText("signed out on every computer");
+    // The same username again: 409 CONFLICT, shown in the dialog, which stays open.
+    await page.getByRole("button", { name: "Add staff account" }).click();
+    await create.getByLabel("Name", { exact: true }).fill(uniqueName("Duplicate"));
+    await create.getByLabel("Username", { exact: true }).fill(username);
+    await create.getByLabel("Password", { exact: true }).fill(firstPassword);
+    await create.getByLabel("Type the password again").fill(firstPassword);
+    await create.getByRole("button", { name: "Create account" }).click();
+    await expect(create.getByRole("alert").filter({ hasText: "The account was not created" })).toContainText(
+      "That username is already taken.",
+    );
+    await create.getByRole("button", { name: "Close without saving" }).click();
+    await expect(create).toBeHidden();
+
+    await row.getByRole("button", { name: `Set a new password for ${displayName}` }).click();
+    const reset = page.getByRole("dialog", { name: `Set a new password for ${displayName}` });
+    await expect(reset).toContainText("They are signed out on every device");
     await reset.getByLabel("New password", { exact: true }).fill("too-short");
     await reset.getByLabel("Type the new password again").fill("too-short");
-    await reset.getByRole("button", { name: "Reset password" }).click();
+    await reset.getByRole("button", { name: "Set new password" }).click();
     await expect(reset.getByText("Use at least 12 characters")).toBeVisible();
     await reset.getByLabel("New password", { exact: true }).fill(newPassword);
     await reset.getByLabel("Type the new password again").fill(newPassword);
-    await reset.getByRole("button", { name: "Reset password" }).click();
+    await reset.getByRole("button", { name: "Set new password" }).click();
     await expect(reset).toBeHidden();
-    await expect(page.getByText("Password reset", { exact: true })).toBeVisible();
+    await expect(page.getByText("Password changed", { exact: true })).toBeVisible();
 
     await page.context().clearCookies();
     await page.goto("/login");

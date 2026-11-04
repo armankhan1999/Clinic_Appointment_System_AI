@@ -161,56 +161,48 @@ function CreateStaffDialog({ open, onOpenChange }: { open: boolean; onOpenChange
   );
 }
 
-const RESET_API_FIELDS = { password: "password" } as const;
-
-/** IMP-04: sets a new password; the API then signs the person out everywhere. */
 function ResetPasswordDialog({ user, onClose }: { user: StaffUser | null; onClose: () => void }) {
-  const queryClient = useQueryClient();
   const notify = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const empty: StaffPasswordResetForm = { password: "", confirmPassword: "" };
   const form = useForm<StaffPasswordResetForm>({ resolver: zodResolver(staffPasswordResetSchema), defaultValues: empty });
 
   const reset = useMutation({
-    mutationFn: (input: { id: string; password: string }) => updateStaffUser(input.id, { password: input.password }),
-    onSuccess: async (saved) => {
-      notify({ tone: "success", title: "Password reset", description: `${saved.display_name} must sign in again with the new password.` });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.staffUsers });
+    mutationFn: (values: StaffPasswordResetForm) => updateStaffUser(user?.id ?? "", { password: values.password }),
+    onSuccess: (updated) => {
+      notify({ tone: "success", title: "Password changed", description: `${updated.display_name} is signed out everywhere and must use the new password.` });
+      form.reset(empty);
+      onClose();
     },
-    onError: (error) => applyApiFieldErrors(error, form.setError, RESET_API_FIELDS),
+    onError: (error) => applyApiFieldErrors(error, form.setError, { password: "password" }),
   });
-
-  const close = () => {
-    reset.reset();
-    form.reset(empty);
-    setShowPassword(false);
-    onClose();
-  };
 
   const e = form.formState.errors;
   return (
-    <Dialog open={user !== null} onOpenChange={(next) => (!next && !reset.isPending ? close() : undefined)}>
+    <Dialog
+      open={user !== null}
+      onOpenChange={(next) => {
+        if (reset.isPending || next) return;
+        reset.reset();
+        form.reset(empty);
+        setShowPassword(false);
+        onClose();
+      }}
+    >
       <DialogContent>
-        <form
-          noValidate
-          onSubmit={form.handleSubmit((values) =>
-            user ? reset.mutate({ id: user.id, password: values.password }, { onSuccess: close }) : undefined,
-          )}
-          className="space-y-5"
-        >
+        <form noValidate onSubmit={form.handleSubmit((values) => reset.mutate(values))} className="space-y-5">
           <DialogHeader>
-            <DialogTitle>Reset password for {user?.display_name}</DialogTitle>
+            <DialogTitle>Set a new password for {user?.display_name}</DialogTitle>
             <DialogDescription>
-              {user?.display_name} is signed out on every computer and signs in again with the new password. Give it to them in
-              person, not by message.
+              They are signed out on every device and must sign in with the new password. Give it to them in person, not by message.
             </DialogDescription>
           </DialogHeader>
           <FieldGroup>
             <Field data-invalid={!!e.password}>
-              <FieldLabel htmlFor="staff-new-password">New password</FieldLabel>
+              <FieldLabel htmlFor="reset-password">New password</FieldLabel>
               <div className="relative">
                 <Input
-                  id="staff-new-password"
+                  id="reset-password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
                   className="pr-12"
@@ -233,9 +225,9 @@ function ResetPasswordDialog({ user, onClose }: { user: StaffUser | null; onClos
               <FieldError errors={[e.password]} />
             </Field>
             <Field data-invalid={!!e.confirmPassword}>
-              <FieldLabel htmlFor="staff-new-password-confirm">Type the new password again</FieldLabel>
+              <FieldLabel htmlFor="reset-password-confirm">Type the new password again</FieldLabel>
               <Input
-                id="staff-new-password-confirm"
+                id="reset-password-confirm"
                 type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
                 aria-invalid={!!e.confirmPassword}
@@ -247,15 +239,15 @@ function ResetPasswordDialog({ user, onClose }: { user: StaffUser | null; onClos
           <InlineError
             error={reset.error}
             title="The password was not changed"
-            fieldsMarked={matchApiFields(reset.error, RESET_API_FIELDS).length > 0}
+            fieldsMarked={matchApiFields(reset.error, { password: "password" }).length > 0}
           />
           <DialogFooter>
-            <Button type="button" variant="outline" disabled={reset.isPending} onClick={close}>
+            <Button type="button" variant="outline" disabled={reset.isPending} onClick={onClose}>
               Close without saving
             </Button>
             <Button type="submit" disabled={reset.isPending}>
               {reset.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <KeyRound aria-hidden />}
-              Reset password
+              Set new password
             </Button>
           </DialogFooter>
         </form>
@@ -374,22 +366,22 @@ export function StaffAccounts() {
                           Unlock
                         </Button>
                       ) : null}
+                      {user.active && user.id !== me ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Set a new password for ${user.display_name}`}
+                          onClick={() => setResetting(user)}
+                        >
+                          <KeyRound aria-hidden />
+                          New password
+                        </Button>
+                      ) : null}
                       {user.id !== me ? (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={`Reset password for ${user.display_name}`}
-                            onClick={() => setResetting(user)}
-                          >
-                            <KeyRound aria-hidden />
-                            Reset password
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setPending({ kind: "toggle", user })}>
-                            <Power aria-hidden />
-                            {user.active ? "Deactivate" : "Reactivate"}
-                          </Button>
-                        </>
+                        <Button variant="ghost" size="sm" onClick={() => setPending({ kind: "toggle", user })}>
+                          <Power aria-hidden />
+                          {user.active ? "Deactivate" : "Reactivate"}
+                        </Button>
                       ) : null}
                     </div>
                   </TableCell>

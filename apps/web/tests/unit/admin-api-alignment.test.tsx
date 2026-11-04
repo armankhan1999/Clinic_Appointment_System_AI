@@ -46,6 +46,49 @@ describe("staff accounts use locked_until", () => {
   });
 });
 
+describe("staff password reset", () => {
+  it("lets an admin set a new password for someone else, never for their own row", async () => {
+    const { calls } = stubFetch((call: StubbedCall) => {
+      if (call.url === "/api/v1/auth/me") return jsonResponse(200, sessionBody("admin"));
+      if (call.url === "/api/v1/staff-users/u-2" && call.method === "PATCH") {
+        return jsonResponse(200, { id: "u-2", username: "ravi", display_name: "Ravi", role: "receptionist", active: true, locked_until: null });
+      }
+      if (call.url.startsWith("/api/v1/staff-users")) {
+        return jsonResponse(
+          200,
+          page([
+            { id: "u-1", username: "desk1", display_name: "Asha Desk", role: "admin", active: true, locked_until: null },
+            { id: "u-2", username: "ravi", display_name: "Ravi", role: "receptionist", active: true, locked_until: null },
+          ]),
+        );
+      }
+      throw new Error(`unexpected ${call.method} ${call.url}`);
+    });
+    renderWithProviders(<StaffAccounts />);
+
+    const meRow = (await screen.findByText("Asha Desk")).closest("tr");
+    if (!meRow) throw new Error("row not rendered");
+    expect(within(meRow).queryByRole("button", { name: /new password/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Set a new password for Ravi" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("New password"), { target: { value: "short" } });
+    fireEvent.change(within(dialog).getByLabelText("Type the new password again"), { target: { value: "short" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set new password" }));
+    expect(await within(dialog).findByText("Use at least 12 characters")).toBeTruthy();
+
+    fireEvent.change(within(dialog).getByLabelText("New password"), { target: { value: "a long new passphrase" } });
+    fireEvent.change(within(dialog).getByLabelText("Type the new password again"), { target: { value: "a long new passphrase" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set new password" }));
+
+    expect(await screen.findByText("Password changed")).toBeTruthy();
+    const patches = calls.filter((c) => c.method === "PATCH");
+    expect(patches).toHaveLength(1);
+    expect(patches[0].body).toEqual({ password: "a long new passphrase" });
+    expect(patches[0].headers["x-csrf-token"]).toBe("csrf-1");
+  });
+});
+
 describe("FAQ duplicate topic", () => {
   it("shows the 409 CONFLICT on the topic field and keeps the dialog open", async () => {
     stubFetch((call: StubbedCall) => {
