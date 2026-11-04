@@ -18,7 +18,8 @@ import { createLeave, deleteLeave, getLeaves, previewLeave } from "@/lib/api/end
 import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import { isApiError } from "@/lib/api/errors";
 import { appointmentSchema, type Appointment, type Leave } from "@/lib/api/schemas";
-import { formatLongDate, todayIso } from "@/lib/dates";
+import { useClinicToday } from "@/lib/clinic-today";
+import { formatLongDate } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { LEAVE_REASON_MAX, leaveFormSchema, type LeaveForm } from "@/lib/validation/forms";
 
@@ -45,7 +46,7 @@ function AffectedList({ appointments }: { appointments: Appointment[] }) {
 export function LeaveManager({ doctorId, doctorName }: { doctorId: string; doctorName: string }) {
   const queryClient = useQueryClient();
   const notify = useToast();
-  const today = todayIso();
+  const today = useClinicToday();
   const [review, setReview] = useState<Review | null>(null);
   const [acknowledged, setAcknowledged] = useState(false);
   const [removing, setRemoving] = useState<Leave | null>(null);

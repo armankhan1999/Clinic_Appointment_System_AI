@@ -9,7 +9,8 @@ repository root unless stated otherwise. Architecture: [`../architecture/README.
 pwsh scripts/start.ps1 -WebPort 3100   # API + Telegram bot (with scheduler) + dashboard; waits until all answer
 pwsh scripts/start.ps1 -NoBot          # API + dashboard only (no Telegram polling, no reminders)
 pwsh scripts/start.ps1 -Rebuild        # force a fresh dashboard build
-pwsh scripts/start.ps1 -Dev            # live development: API restarts on code changes, dashboard via `next dev`
+pwsh scripts/start.ps1 -Dev            # live development: dashboard via `next dev` (instant updates)
+pwsh scripts/restart.ps1 -Part api     # restart only the API (or -Part bot) after backend changes
 pwsh scripts/stop.ps1                  # stops every process start.ps1 started (whole process trees)
 ```
 
@@ -31,7 +32,7 @@ Set-Location apps/backend
 uv run python scripts/create_admin.py --target dev --username owner --display-name "Clinic Owner"
 ```
 
-Further staff accounts are created in the dashboard (Admin → Staff accounts). The E2E test accounts
+On the dev PC an `owner` admin already exists; its password is in the git-ignored `logs/dashboard-login.txt` (change it, then delete the file). Further staff accounts are created in the dashboard (Admin → Staff accounts). The E2E test accounts
 `e2e_admin` / `e2e_desk` exist in the dev schema; their passwords are only in the git-ignored
 `apps/web/.env.local`.
 

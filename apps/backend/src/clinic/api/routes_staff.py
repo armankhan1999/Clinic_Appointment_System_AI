@@ -87,6 +87,18 @@ async def schedule(principal: Staff, api: Api, date: Annotated[dt.date, Query()]
     return ScheduleOut(date, await api.ops.schedule(date))
 
 
+@dataclass(frozen=True)
+class ClinicTodayOut:
+    date: dt.date
+    timezone: str
+
+
+@router.get("/clinic/today")
+async def clinic_today(principal: Staff, api: Api) -> ClinicTodayOut:
+    day, timezone = await api.ops.clinic_today()
+    return ClinicTodayOut(day, timezone)
+
+
 @router.get("/attention")
 async def attention(principal: Staff, api: Api) -> AttentionPanelOut:
     return await api.ops.attention()

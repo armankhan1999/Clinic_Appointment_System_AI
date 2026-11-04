@@ -20,6 +20,12 @@ export const staffUserSchema = z.object({
 });
 export type StaffUser = z.infer<typeof staffUserSchema>;
 
+export const clinicTodaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  timezone: z.string().min(1),
+});
+export type ClinicToday = z.infer<typeof clinicTodaySchema>;
+
 export const sessionSchema = z.object({
   user: staffUserSchema,
   csrf_token: z.string().min(1),

@@ -211,6 +211,11 @@ class StaffOpsService:
             DoctorDayOut(d.id, d.name, d.specialty, [r for r in rows if r.doctor_id == d.id]) for d in doctors
         ]
 
+    async def clinic_today(self) -> tuple[date, str]:
+        """Today in the clinic's time zone, so the dashboard never relies on the PC's clock or zone."""
+        view = await self._settings.get()
+        return self._clock().astimezone(view.tz).date(), view.tz.key
+
     async def attention(self) -> AttentionPanelOut:
         """E6-S2-AC3: open tickets, unacknowledged emergency alerts and flagged booked appointments."""
         view = await self._settings.get()

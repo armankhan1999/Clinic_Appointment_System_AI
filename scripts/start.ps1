@@ -17,8 +17,8 @@
     Rebuild the dashboard even when an up-to-date build exists.
 
 .PARAMETER Dev
-    Live development: the API restarts when backend code changes and the dashboard runs `next dev`,
-    so edits appear in the browser at once (no build). Not for demos or production.
+    Live development: the dashboard runs `next dev`, so frontend edits appear in the browser at once
+    (no build). After backend edits run scripts\restart.ps1 -Part api (or bot). Not for demos or production.
 
 .EXAMPLE
     pwsh scripts/start.ps1 -WebPort 3100
@@ -105,8 +105,7 @@ function Test-Http([string]$Url) {
 $uv = (Get-Command uv).Source
 $node = (Get-Command node).Source
 $parts = [ordered]@{}
-$apiArgs = if ($Dev) { @('run', 'clinic-api', '--reload') } else { @('run', 'clinic-api') }
-$parts.api = Start-Part 'api' $backend $uv $apiArgs
+$parts.api = Start-Part 'api' $backend $uv @('run', 'clinic-api')
 if (-not $NoBot) { $parts.bot = Start-Part 'bot' $backend $uv @('run', 'clinic-bot') }
 $nextMode = if ($Dev) { 'dev' } else { 'start' }
 $parts.web = Start-Part 'web' $web $node @('node_modules/next/dist/bin/next', $nextMode, '-p', "$WebPort")

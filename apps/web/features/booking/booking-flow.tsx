@@ -20,7 +20,8 @@ import { createAppointment, findPatientsByPhone, getAvailability, getDoctors, ty
 import { isApiError, isOutcomeUnknown, toApiError } from "@/lib/api/errors";
 import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { Appointment, PatientRef, Slot } from "@/lib/api/schemas";
-import { formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
+import { useClinicToday } from "@/lib/clinic-today";
+import { formatLongDate, isIsoDate } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { newPatientSchema, phoneLookupSchema, type NewPatientForm, type PhoneLookupForm } from "@/lib/validation/forms";
 import { cn } from "@/lib/utils";
@@ -296,7 +297,7 @@ function BookedConfirmation({ appointment, onBookAnother }: { appointment: Appoi
 export function BookingFlow() {
   const queryClient = useQueryClient();
   const notify = useToast();
-  const today = todayIso();
+  const today = useClinicToday();
   const [doctorId, setDoctorId] = useState("");
   const [date, setDate] = useState(today);
   const [slot, setSlot] = useState<Slot | null>(null);

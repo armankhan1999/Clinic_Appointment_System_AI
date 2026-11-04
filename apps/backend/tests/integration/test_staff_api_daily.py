@@ -95,6 +95,20 @@ async def test_wrong_password_and_lockout(settings: Settings, session_factory: F
     assert "locked_until" in locked.json()["error"]["details"]
 
 
+async def test_today_is_the_clinic_date_not_the_server_or_pc_date(
+    settings: Settings, session_factory: Factory
+) -> None:
+    """At 00:30 in the clinic it is still the previous day in UTC: the dashboard must use the clinic's day."""
+    await _clinic(session_factory)
+    just_after_midnight = datetime(2030, 1, 7, 0, 30, tzinfo=IST)  # 2030-01-06 19:00 UTC
+    async with api_client(settings, session_factory, lambda: just_after_midnight) as client:
+        anonymous = await client.get("/api/v1/clinic/today")
+        await login(client, "riya")
+        today = await client.get("/api/v1/clinic/today")
+    assert anonymous.status_code == 401
+    assert today.json() == {"date": "2030-01-07", "timezone": "Asia/Kolkata"}
+
+
 async def test_writes_need_the_csrf_token(settings: Settings, session_factory: Factory) -> None:
     _, _, appointment_id = await _clinic(session_factory)
     async with api_client(settings, session_factory, lambda: NOW) as client:

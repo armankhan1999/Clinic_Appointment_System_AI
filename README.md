@@ -50,7 +50,8 @@ dashboard when needed, waits until every part answers (limit 2 minutes), and wri
 pwsh scripts/start.ps1               # dashboard on http://localhost:3000
 pwsh scripts/start.ps1 -WebPort 3100 # if port 3000 is taken (it is on the original dev PC)
 pwsh scripts/start.ps1 -NoBot        # API and dashboard only
-pwsh scripts/start.ps1 -WebPort 3100 -Dev  # live development: API auto-reload + Next dev server
+pwsh scripts/start.ps1 -WebPort 3100 -Dev  # live development: dashboard updates instantly (next dev)
+pwsh scripts/restart.ps1 -Part api   # after backend changes: restart only the API (or -Part bot)
 pwsh scripts/stop.ps1                # stops everything start.ps1 started
 ```
 

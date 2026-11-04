@@ -7,6 +7,7 @@ export const LIVE_REFRESH_MS = 30_000;
 
 export const queryKeys = {
   session: ["session"] as const,
+  clinicToday: ["clinic-today"] as const,
   schedule: (date: string) => ["schedule", date] as const,
   scheduleAll: ["schedule"] as const,
   attention: ["attention"] as const,

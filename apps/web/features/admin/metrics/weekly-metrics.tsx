@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getWeeklyMetrics } from "@/lib/api/endpoints";
-import { addDays, formatShortDate, isIsoDate, mondayOf, todayIso } from "@/lib/dates";
+import { useClinicToday } from "@/lib/clinic-today";
+import { addDays, formatShortDate, isIsoDate, mondayOf } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 
 const count = new Intl.NumberFormat("en-IN");
@@ -30,7 +31,7 @@ export function WeeklyMetrics() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const thisWeek = mondayOf(todayIso());
+  const thisWeek = mondayOf(useClinicToday());
   const requested = searchParams.get("week");
   const weekStart = requested && isIsoDate(requested) ? mondayOf(requested) : thisWeek;
 

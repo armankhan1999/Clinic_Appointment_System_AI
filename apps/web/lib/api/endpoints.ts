@@ -5,6 +5,7 @@ import {
   alertAcknowledgedSchema,
   appointmentSchema,
   attentionSchema,
+  clinicTodaySchema,
   auditEntrySchema,
   availabilitySchema,
   clinicSettingsSchema,
@@ -50,6 +51,8 @@ export async function logout() {
 
 export const getDaySchedule = (date: string, signal?: AbortSignal) =>
   apiRequest("/schedule", dayScheduleSchema, { query: { date }, signal });
+
+export const getClinicToday = (signal?: AbortSignal) => apiRequest("/clinic/today", clinicTodaySchema, { signal });
 
 export const getAttention = (signal?: AbortSignal) => apiRequest("/attention", attentionSchema, { signal });
 

@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getDaySchedule } from "@/lib/api/endpoints";
 import type { DaySchedule } from "@/lib/api/schemas";
-import { addDays, formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
+import { useClinicToday } from "@/lib/clinic-today";
+import { addDays, formatLongDate, isIsoDate } from "@/lib/dates";
 import { LIVE_REFRESH_MS, queryKeys } from "@/lib/query";
 import { useIsAdmin } from "@/lib/session";
 import { cn } from "@/lib/utils";
@@ -52,7 +53,7 @@ export function TodayView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const isAdmin = useIsAdmin();
-  const today = todayIso();
+  const today = useClinicToday();
   const requested = searchParams.get("date");
   const date = requested && isIsoDate(requested) ? requested : today;
 

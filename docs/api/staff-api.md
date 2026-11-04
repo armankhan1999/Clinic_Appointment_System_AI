@@ -68,6 +68,7 @@ type Slot = { start: string; time_label: string };
 | Method & path | Request | Response | Source |
 |---|---|---|---|
 | `GET /schedule?date=YYYY-MM-DD` | — | `{ date, doctors: [{ doctor_id, name, specialty, appointments: Appointment[] }] }` — every active doctor, appointments of all statuses that day, ordered by start | E6-S2-AC1/AC2 |
+| `GET /clinic/today` | — | `{ date: "YYYY-MM-DD", timezone }` — today in the clinic's time zone; the dashboard uses it for Today, booking dates, leave days and the metrics week, never the PC's clock | review L4, D-40 |
 | `GET /attention` | — | `{ tickets: [{ id, reason, created_at, patient: PatientRef }], alerts: [{ id, created_at, patient: PatientRef \| null, telegram_user_id: number \| null }], flagged: Appointment[] }` — open tickets, unacknowledged alerts, appointments with `staff_attention` | E6-S2-AC3, E5-S3-AC3, E4-S4-AC2 |
 | `GET /doctors?active=true` | — | `{ items: [{ id, name, specialty, active }] }` | E6-S4 |
 | `GET /availability?doctor_id=&date=` | — | `{ date, slots: Slot[] }` (staff are not bound by the bot cut-off, GAP-21) | E6-S4 |
