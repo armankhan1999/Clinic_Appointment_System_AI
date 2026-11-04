@@ -40,7 +40,7 @@ Each state has a text colour, a tint and an edge. **A state is always shown as t
 
 The emergency treatment is a deep crimson edge and a pale tint with normal-weight body text. It does not flash, pulse or play sound, and it uses no siren icon or capitals: unmistakable to staff, unremarkable to a patient glancing at the screen.
 
-Contrast (WCAG 2.x relative luminance, computed for every pair): ink on white 16.5:1, muted on page 6.31:1, white on pine 7.8:1; status text on its tint is between 5.64:1 (cancelled) and 8.04:1 (completed). All text pairs meet AA (4.5:1). Status edges are redundant cues next to text, so the 3:1 non-text rule does not apply to them alone; the cancelled edge (2.52:1) is deliberately faint.
+Contrast (WCAG 2.x relative luminance, computed for every pair): ink on white 16.5:1, muted on page 6.31:1, white on pine 7.8:1; status text on its tint is between 5.64:1 (cancelled) and 7.98:1 (completed). All text pairs meet AA (4.5:1). Status edges are redundant cues next to text, so the 3:1 non-text rule does not apply to them alone; the cancelled edge (2.52:1 on white) is deliberately faint. (Ratios recomputed from the token values in `globals.css` on 2026-11-05.)
 
 ## Typography
 
@@ -77,12 +77,12 @@ Contrast (WCAG 2.x relative luminance, computed for every pair): ink on white 16
 | Destructive or irreversible action | `ConfirmDialog` (shadcn `AlertDialog`) | Names the patient/time, says the consequence, keeps the dialog open on failure with the error inline. Cancel buttons say what they keep ("Keep appointment"). |
 | Create/edit forms | shadcn `Dialog` + `Field` | Visible labels, error under the field (`role="alert"`), helper text for formats, "Close without saving". |
 | Row actions | `DropdownMenu` (non-modal) | Disabled items explain why in a menu label (e.g. attendance before start time). |
-| Status | `StatusPill`, `SourcePill`, `ReminderPill`, `AttentionPill` | Icon + text, never colour alone. |
+| Status | `StatusPill`, `SourcePill`, `ReminderPill`, `ConfirmedPill`, `AttentionPill` | Icon + text, never colour alone. |
 | Loading | `LoadingState` (skeletons, `role="status"`) | Same shape as the content; no spinners for whole sections. |
 | Empty | `EmptyState` | Says what the empty state means and offers the next step. |
 | Error | `ErrorState` / `InlineError` | API message, "Try again", and the request id as "Support reference". 403 uses `ForbiddenState`. |
 | Feedback | `useToast()` | Success toasts are polite and dismiss after 6 s; error toasts are assertive and stay 12 s. The action keeps its name ("Cancel appointment" → "Appointment cancelled"). |
-| Dates | `formatLongDate`, `formatShortDate` | Calendar dates from the API; appointment times always from `time_label`. UTC instants are shown as "x minutes ago" with the UTC time on hover, or explicitly in UTC (activity log). The browser never converts clinic time. |
+| Dates | `formatLongDate`, `formatShortDate` | Calendar dates from the API; appointment times always from `time_label`. "Today" is the clinic's date from `GET /api/v1/clinic/today` (D-40), not the PC clock. UTC instants are shown as "x minutes ago" with the UTC time on hover, or explicitly in UTC (activity log). The browser never converts clinic time. |
 
 ## Accessibility rules
 
@@ -93,4 +93,4 @@ Contrast (WCAG 2.x relative luminance, computed for every pair): ink on white 16
 - Live updates: toasts and loading states use `role="status"`/`aria-live`; errors use `role="alert"`.
 - Skip link to the main content; one `h1` per page; sections are labelled by their headings.
 - Reduced motion: animations and transitions are cut to near zero under `prefers-reduced-motion`.
-- No patient data in the console, page titles or URLs other than the exact-phone lookup request.
+- No patient names or phone numbers in the console, page titles or URLs. The phone lookup sends the number in a POST body (`POST /api/v1/patients/lookup`, D-41). The only patient-related value that can appear in a URL is a patient ID (UUID) typed into the activity-log filter, which the audit page keeps in its query string.
