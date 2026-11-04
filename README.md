@@ -46,6 +46,20 @@ uv run clinic-api     # terminal 1
 uv run clinic-bot     # terminal 2, then message your bot in Telegram and send /start
 ```
 
+## Dashboard
+
+The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 20.9+). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
+
+```powershell
+Set-Location apps/web
+npm ci
+$env:API_PORT = "8010"
+npm run dev            # terminal 3: http://localhost:3000
+npm run lint; npx tsc --noEmit; npm run test; npm run build
+```
+
+Playwright E2E specs (`npm run test:e2e`) need the API, the dashboard and seeded staff accounts; see [`apps/web/README.md`](apps/web/README.md). Design rules: [`docs/design/design-system.md`](docs/design/design-system.md).
+
 ## Test and check
 
 ```powershell

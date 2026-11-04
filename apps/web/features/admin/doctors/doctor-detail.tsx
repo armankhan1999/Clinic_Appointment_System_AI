@@ -1,0 +1,72 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+
+import { PageHeader } from "@/components/page-header";
+import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { Pill } from "@/components/status";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getDoctors } from "@/lib/api/endpoints";
+import { queryKeys } from "@/lib/query";
+
+import { LeaveManager } from "./leave-manager";
+import { ScheduleEditor } from "./schedule-editor";
+
+export function DoctorDetail() {
+  const params = useParams<{ id: string }>();
+  const id = params.id;
+  // The contract has no GET /doctors/{id}; the full list is small and already cached by the list page.
+  const doctors = useQuery({ queryKey: queryKeys.doctors("all"), queryFn: ({ signal }) => getDoctors({}, signal) });
+  const doctor = doctors.data?.items.find((d) => d.id === id);
+
+  const back = (
+    <Button variant="ghost" asChild className="-ml-3 mb-2">
+      <Link href="/admin/doctors">
+        <ChevronLeft aria-hidden />
+        All doctors
+      </Link>
+    </Button>
+  );
+
+  if (doctors.isPending) return <LoadingState label="Loading doctor" />;
+  if (doctors.isError) return <ErrorState what="this doctor" error={doctors.error} onRetry={() => doctors.refetch()} />;
+  if (!doctor) {
+    return (
+      <>
+        {back}
+        <EmptyState title="Doctor not found" description="They may have been removed, or the link is wrong." />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {back}
+      <PageHeader
+        title={doctor.name}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            {doctor.specialty}
+            {doctor.active ? <Pill tone="booked">Active</Pill> : <Pill tone="cancelled">Inactive</Pill>}
+          </span>
+        }
+      />
+      <Tabs defaultValue="hours" className="gap-4">
+        <TabsList>
+          <TabsTrigger value="hours">Weekly hours</TabsTrigger>
+          <TabsTrigger value="leave">Leave days</TabsTrigger>
+        </TabsList>
+        <TabsContent value="hours">
+          <ScheduleEditor doctorId={doctor.id} doctorName={doctor.name} />
+        </TabsContent>
+        <TabsContent value="leave">
+          <LeaveManager doctorId={doctor.id} doctorName={doctor.name} />
+        </TabsContent>
+      </Tabs>
+    </>
+  );
+}

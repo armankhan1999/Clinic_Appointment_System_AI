@@ -1,0 +1,17 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+
+import { LoadingState } from "@/components/states";
+import { DoctorDetail } from "@/features/admin/doctors/doctor-detail";
+
+export const metadata: Metadata = { title: "Doctor hours and leave" };
+// Content appears after the browser confirms the session; see app/(staff)/layout.tsx.
+export const instant = false;
+
+export default function DoctorPage() {
+  return (
+    <Suspense fallback={<LoadingState label="Loading doctor" />}>
+      <DoctorDetail />
+    </Suspense>
+  );
+}
