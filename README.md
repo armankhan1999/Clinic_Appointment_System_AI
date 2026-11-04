@@ -4,15 +4,27 @@ A Telegram assistant that lets patients of a single clinic register, find doctor
 
 | Process | Command (from `apps/backend`) | What it does |
 |---|---|---|
-| Telegram bot | `uv run clinic-bot` | Long-polls Telegram; consent-first registration; Gemini tool-calling agent |
+| Telegram bot | `uv run clinic-bot` | Long-polls Telegram; consent-first registration; Gemini tool-calling agent; reminder job (every 5 min) and clinic-notice outbox job (every minute) |
 | Staff API | `uv run clinic-api` | FastAPI on `127.0.0.1:%API_PORT%` (default 8000): `/healthz`, `/readyz`, `/api/v1/*` |
 | Dashboard | `npm run start` (from `apps/web`, after `npm run build`) | Next.js staff UI; `/api/v1/*` is rewritten to the API |
 
-Design: [`docs/architecture/`](docs/architecture/README.md) · threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md) · security review: [`docs/security/security-review.md`](docs/security/security-review.md) · decisions: [`docs/tracking/decision-log.md`](docs/tracking/decision-log.md) · operations: [`docs/operations/runbook.md`](docs/operations/runbook.md) · acceptance: [`docs/testing/acceptance-report.md`](docs/testing/acceptance-report.md).
+Design: [`docs/architecture/`](docs/architecture/README.md) · API contract: [`docs/api/staff-api.md`](docs/api/staff-api.md) · threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md) · security review: [`docs/security/security-review.md`](docs/security/security-review.md) · decisions: [`docs/tracking/decision-log.md`](docs/tracking/decision-log.md) · operations: [`docs/operations/runbook.md`](docs/operations/runbook.md) · acceptance: [`docs/testing/acceptance-report.md`](docs/testing/acceptance-report.md).
+
+## Status
+
+All 32 stories of the source have an implementation: the Telegram bot and agent, the staff API and dashboard, reminders and clinic-side notices, and the 38-scenario evaluation suite. The [story tracker](docs/tracking/user-story-tracker.md) lists 31 as COMPLETED and E2-S1 as TESTING (E2-S1-AC3 still lacks a genuine evaluation pass). Where the build differs from the source on purpose (Next.js instead of Streamlit, Postgres only, a PowerShell start script instead of Docker Compose), see [`docs/architecture/README.md`](docs/architecture/README.md#built-versus-source).
+
+Not met or not done yet (details in the [acceptance report](docs/testing/acceptance-report.md)):
+
+- **Reply time (NFR-01, ≤ 5 s for 95% of messages) is not met** on the dev PC: in the recorded runs the free-tier model alone took a median of 5.5–8.0 s per turn.
+- **The evaluation targets of §3.9 are met only with a 45 s diagnostic budget** (35/35, AEV-DIAG-03); at the production settings the last complete run passed 19/35 (AEV-PROD-02), every failure being a model call over 8 s. The final run of all 38 scenarios at production settings has not produced results: it was stopped twice by the Gemini free-tier quota (500 requests per day, shared with the bot).
+- Verified database TLS needs the Supabase CA certificate, which is not yet installed on the dev PC (BLK-05); a person has not yet tapped through registration, booking and reminders in Telegram (BLK-06).
+- No cloud deployment, backup/restore procedure or privacy assessment exists.
 
 ## Prerequisites
 
-- Windows, macOS or Linux with Python 3.14 and [uv](https://docs.astral.sh/uv/) 0.10+
+- Python 3.14 and [uv](https://docs.astral.sh/uv/) 0.10+; Node.js 22+ for the dashboard (see [Dashboard](#dashboard)).
+- Windows with PowerShell 7 (`pwsh`) for the one-command scripts: they use `Get-NetTCPConnection` and `taskkill`. The backend and dashboard also install, test and build on Linux in CI (`ubuntu-latest`); macOS is not verified.
 - A Supabase project (one project, schemas `clinic` and `clinic_test`; see D-17 and D-20)
 - A Telegram bot token from @BotFather and a Google AI Studio (Gemini) API key
 
@@ -79,12 +91,12 @@ uv run pytest -m live              # real Gemini and Telegram smoke tests
 uv run pytest -m eval tests/integration/test_agent_eval.py   # 38-scenario agent evaluation -> reports/eval-*.md
 ```
 
-Integration, live and evaluation runs share the `clinic_test` schema: run them one at a time. If Windows
+The evaluation suite calls the real model and uses the same free-tier daily quota as the bot; `EVAL_RUNS=N` repeats every scenario. Neither the live tests nor the evaluation suite run in CI. Integration, live and evaluation runs share the `clinic_test` schema: run them one at a time. If Windows
 Application Control blocks the `pytest.exe` launcher (os error 4551), use `uv run python -m pytest …`.
 
 ## Dashboard
 
-The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 22+: the test tooling's jsdom dependencies declare 22.22+ or 24.15+; Next.js alone needs 20.9+). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
+The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 22 or newer, as `package.json` `engines` says; the test tooling's jsdom 30.1.3 declares Node `^22.22.2 || ^24.15.0 || >=26.0.0`, and Next.js alone needs 20.9+; CI uses Node 24). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
 
 ```powershell
 Set-Location apps/web
@@ -106,7 +118,7 @@ uv run pytest -m live               # real Gemini call with synthetic data
 uv run python -m pip_audit --skip-editable   # dependency vulnerabilities
 ```
 
-Integration tests need the `.env` database settings; they never touch the `clinic` schema (the test role has no rights on it). CI (`.github/workflows/ci.yml`) runs the same checks against a throwaway Postgres 17 container.
+Integration tests need the `.env` database settings; they never touch the `clinic` schema (the test role has no rights on it). CI (`.github/workflows/ci.yml`) runs ruff, the format check, mypy, the default `pytest` run and `pip-audit` against a throwaway Postgres 17 container, and the dashboard's lint, type check, unit tests, build and `npm audit`. It does not run the live tests, the evaluation suite or the Playwright E2E specs.
 
 ## Configuration notes
 
@@ -116,6 +128,9 @@ Integration tests need the `.env` database settings; they never touch the `clini
 | `DB_SSL_ROOT_CERT` | Path to the Supabase CA (`prod-ca-2021.crt`, Dashboard → Database Settings → SSL Configuration). Enables certificate verification; **required in production**. Without it, dev/test use encrypted but unverified TLS and log a warning. |
 | `API_PORT` | Change it if port 8000 is taken (it is on the original dev PC, so `.env` uses 8010). |
 | `GEMINI_MODEL` | `gemini-3.5-flash-lite` by default (D-13, D-38). Free-tier daily limits are per project and per model (500 requests/day for this model, 20 for `gemini-3.5-flash`) and reset at midnight Pacific time. The free tier may use prompts for training, so only synthetic data is used and the model never receives patient identity (D-16). |
+| `LLM_TIMEOUT_SECONDS`, `AGENT_TURN_BUDGET_SECONDS` | Default 8 and 25 (D-34). One model call past 8 s counts as the model being unreachable and the patient gets the fallback reply with the clinic phone number; a whole turn may take up to 25 s while the model keeps answering. The turn budget may not be smaller than the call timeout. |
+| `AUTH_SECRET` | At least 32 random characters. Keys the hashes of attempted unknown staff usernames (lockout without storing the names). |
+| `CLINIC_TIMEZONE` | IANA time zone written into the clinic settings by the seed script (`Asia/Kolkata` in `.env.example`); afterwards an admin changes it in the dashboard. The other clinic details (name, phone, address, emergency number and phrases, limits) come from the seed script and the dashboard, not from `.env`. |
 
 ## Troubleshooting
 
