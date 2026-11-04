@@ -15,10 +15,27 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getSettings, updateSettings } from "@/lib/api/endpoints";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { ClinicSettings } from "@/lib/api/schemas";
 import { formatRelative, formatUtcTimestamp, toHourMinute } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { parsePhrases, settingsFormSchema, type SettingsForm } from "@/lib/validation/forms";
+
+const SETTINGS_API_FIELDS = {
+  clinic_name: "clinic_name",
+  phone: "phone",
+  address: "address",
+  staff_hours_text: "staff_hours_text",
+  timezone: "timezone",
+  emergency_number: "emergency_number",
+  emergency_phrases: "emergencyPhrasesText",
+  cutoff_minutes: "cutoff_minutes",
+  booking_window_days: "booking_window_days",
+  max_upcoming_per_patient: "max_upcoming_per_patient",
+  max_per_doctor_per_day: "max_per_doctor_per_day",
+  morning_end: "morning_end",
+  afternoon_end: "afternoon_end",
+} as const;
 
 const NUMBER_FIELDS = ["cutoff_minutes", "booking_window_days", "max_upcoming_per_patient", "max_per_doctor_per_day"] as const;
 
@@ -109,6 +126,7 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
       form.reset(toForm(saved));
       notify({ tone: "success", title: "Clinic settings saved" });
     },
+    onError: (error) => applyApiFieldErrors(error, form.setError, SETTINGS_API_FIELDS),
   });
 
   // A time-zone change moves every slot and appointment label, so it is confirmed separately.
@@ -221,7 +239,11 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
       </div>
 
       <div className="sticky bottom-0 z-10 space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-overlay)]">
-        <InlineError error={save.error} title="The settings were not saved" />
+        <InlineError
+          error={save.error}
+          title="The settings were not saved"
+          fieldsMarked={matchApiFields(save.error, SETTINGS_API_FIELDS).length > 0}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={!isDirty || save.isPending}>
             {save.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Save aria-hidden />}

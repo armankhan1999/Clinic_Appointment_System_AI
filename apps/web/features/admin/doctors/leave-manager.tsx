@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { createLeave, deleteLeave, getLeaves, previewLeave } from "@/lib/api/endpoints";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import { isApiError } from "@/lib/api/errors";
 import { appointmentSchema, type Appointment, type Leave } from "@/lib/api/schemas";
 import { formatLongDate, todayIso } from "@/lib/dates";
@@ -62,6 +63,7 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
       setAcknowledged(false);
       setReview({ date: values.date, reason: values.reason.trim(), affected: result.affected });
     },
+    onError: (error) => applyApiFieldErrors(error, form.setError, { date: "date" }),
   });
 
   const create = useMutation({
@@ -138,7 +140,7 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
                 <FieldError errors={[errors.reason]} />
               </Field>
             </FieldGroup>
-            <InlineError error={preview.error} />
+            <InlineError error={preview.error} fieldsMarked={matchApiFields(preview.error, { date: "date" }).length > 0} />
             <Button type="submit" disabled={preview.isPending}>
               {preview.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Search aria-hidden />}
               Check bookings on this day

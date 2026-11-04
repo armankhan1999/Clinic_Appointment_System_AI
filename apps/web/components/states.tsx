@@ -30,11 +30,14 @@ export function InlineError({
   title,
   className,
   unknownOutcome,
+  fieldsMarked = false,
 }: {
   error: unknown;
   title?: string;
   className?: string;
   unknownOutcome?: UnknownOutcomeCopy;
+  /** True when the form already marked the fields a 422 named; replaces the API's technical field list. */
+  fieldsMarked?: boolean;
 }) {
   if (!error) return null;
   const apiError = toApiError(error);
@@ -64,7 +67,7 @@ export function InlineError({
       <CircleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-destructive" />
       <div className="min-w-0 space-y-1">
         {title ? <p className="font-semibold">{title}</p> : null}
-        <p>{apiError.message}</p>
+        <p>{fieldsMarked ? "Some details weren't accepted. Check the marked fields." : apiError.message}</p>
         <RequestReference requestId={apiError.requestId} />
       </div>
     </div>

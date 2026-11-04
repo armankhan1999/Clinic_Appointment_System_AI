@@ -18,7 +18,7 @@ export type ApiErrorCode =
   | (string & {});
 
 const DEFAULT_MESSAGES: Record<string, string> = {
-  VALIDATION_ERROR: "Some details aren't valid. Check the highlighted fields and try again.",
+  VALIDATION_ERROR: "Some details weren't accepted. Check them and try again.",
   UNAUTHENTICATED: "Your session has ended. Please sign in again.",
   FORBIDDEN: "Your account isn't allowed to do this.",
   NOT_FOUND: "We couldn't find that. It may have been removed.",

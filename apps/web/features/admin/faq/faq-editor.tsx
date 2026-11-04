@@ -17,10 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { createFaqEntry, deleteFaqEntry, getFaqEntries, updateFaqEntry } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/errors";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { FaqEntry } from "@/lib/api/schemas";
 import { formatRelative, formatUtcTimestamp } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { FAQ_ANSWER_MAX, faqFormSchema, parseAliases, type FaqForm } from "@/lib/validation/forms";
+
+const FAQ_API_FIELDS = { topic: "topic", aliases: "aliasesText", answer: "answer" } as const;
 
 function FaqDialog({ open, onOpenChange, entry }: { open: boolean; onOpenChange: (open: boolean) => void; entry: FaqEntry | null }) {
   const queryClient = useQueryClient();
@@ -46,11 +49,14 @@ function FaqDialog({ open, onOpenChange, entry }: { open: boolean; onOpenChange:
       // The API answers a duplicate topic with 409 CONFLICT; show it on the field that caused it.
       if (isApiError(error) && error.code === "CONFLICT") {
         form.setError("topic", { message: "Another answer already uses this topic name. Choose a different one or edit that answer." }, { shouldFocus: true });
+        return;
       }
+      applyApiFieldErrors(error, form.setError, FAQ_API_FIELDS);
     },
   });
 
   const saveError = save.error && !(isApiError(save.error) && save.error.code === "CONFLICT") ? save.error : null;
+  const fieldsMarked = matchApiFields(save.error, FAQ_API_FIELDS).length > 0;
   const errors = form.formState.errors;
   return (
     <Dialog
@@ -90,7 +96,7 @@ function FaqDialog({ open, onOpenChange, entry }: { open: boolean; onOpenChange:
               <FieldError errors={[errors.answer]} />
             </Field>
           </FieldGroup>
-          <InlineError error={saveError} />
+          <InlineError error={saveError} fieldsMarked={fieldsMarked} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={save.isPending} onClick={() => onOpenChange(false)}>
               Close without saving

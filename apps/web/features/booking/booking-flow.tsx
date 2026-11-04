@@ -18,11 +18,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { createAppointment, findPatientsByPhone, getAvailability, getDoctors, type NewAppointmentPatient } from "@/lib/api/endpoints";
 import { isApiError, isOutcomeUnknown, toApiError } from "@/lib/api/errors";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { Appointment, PatientRef, Slot } from "@/lib/api/schemas";
 import { formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { newPatientSchema, phoneLookupSchema, type NewPatientForm, type PhoneLookupForm } from "@/lib/validation/forms";
 import { cn } from "cn";
+
+const NEW_PATIENT_API_FIELDS = {
+  "patient.full_name": "full_name",
+  "patient.phone": "phone",
+  "patient.verbal_consent": "verbal_consent",
+} as const;
 
 const SLOT_GONE_CODES = new Set(["SLOT_TAKEN", "SLOT_UNAVAILABLE"]);
 
@@ -340,7 +347,9 @@ export function BookingFlow() {
           queryClient.invalidateQueries({ queryKey: queryKeys.scheduleAll }),
           queryClient.invalidateQueries({ queryKey: queryKeys.availability(doctorId, date) }),
         ]);
+        return;
       }
+      applyApiFieldErrors(error, newPatient.setError, NEW_PATIENT_API_FIELDS);
     },
   });
 
@@ -466,6 +475,7 @@ export function BookingFlow() {
           ) : null}
           <InlineError
             error={bookError}
+            fieldsMarked={matchApiFields(bookError, NEW_PATIENT_API_FIELDS).length > 0}
             title="The appointment was not booked"
             unknownOutcome={{
               title: "We couldn't confirm whether the appointment was booked",
