@@ -18,7 +18,7 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 | 5 Feature development | COMPLETED | bot, booking, manage, reminders, FAQ, handoff, staff API, dashboard | — |
 | 6 AI agent | COMPLETED | tool loop, grounding guard, emergency filter, evaluation suite (35 scenarios) | Reply-time decision (below) |
 | 7 Integration | COMPLETED | WEB-E2E-02 (18/18 on the live stack), START-01/02 | — |
-| 8 QA | TESTING | M6-FULL-02 414/0, WEB-UNIT-02 116/0, AEV-DIAG-03 35/35, AEV-PROD-01 20/35 | Telegram tap-through by a person (BLK-06); CI re-run on GitHub |
+| 8 QA | TESTING | M6-FULL-02 414/0, WEB-UNIT-02 116/0, AEV-DIAG-03 35/35, AEV-PROD-01 14/35 and AEV-PROD-02 19/35 (genuine passes after the D-36 recount) | Telegram tap-through by a person (BLK-06); CI re-run on GitHub |
 | 9 Production readiness | TESTING | security review, secret scan, `.env.example` test, one-command start, fresh-clone run | BLK-05 TLS CA; credential rotation; reply-time decision |
 | 10 Final acceptance | IN_PROGRESS | `docs/testing/acceptance-report.md` | Owner decisions listed there |
 

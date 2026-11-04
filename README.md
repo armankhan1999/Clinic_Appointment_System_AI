@@ -8,7 +8,7 @@ A Telegram assistant that lets patients of a single clinic register, find doctor
 | Staff API | `uv run clinic-api` | FastAPI on `127.0.0.1:%API_PORT%` (default 8000): `/healthz`, `/readyz`, `/api/v1/*` |
 | Dashboard | `npm run start` (from `apps/web`, after `npm run build`) | Next.js staff UI; `/api/v1/*` is rewritten to the API |
 
-Design: [`docs/architecture/`](docs/architecture/README.md) · threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md) · decisions: [`docs/tracking/decision-log.md`](docs/tracking/decision-log.md).
+Design: [`docs/architecture/`](docs/architecture/README.md) · threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md) · security review: [`docs/security/security-review.md`](docs/security/security-review.md) · decisions: [`docs/tracking/decision-log.md`](docs/tracking/decision-log.md) · operations: [`docs/operations/runbook.md`](docs/operations/runbook.md) · acceptance: [`docs/testing/acceptance-report.md`](docs/testing/acceptance-report.md).
 
 ## Prerequisites
 
@@ -53,6 +53,10 @@ pwsh scripts/start.ps1 -NoBot        # API and dashboard only
 pwsh scripts/stop.ps1                # stops everything start.ps1 started
 ```
 
+Then open the dashboard and sign in with the admin account from setup step 5, and message the bot in
+Telegram (send `/start`). Health: `http://127.0.0.1:%API_PORT%/healthz` and `/readyz`. Log events and
+known issues: [`docs/operations/runbook.md`](docs/operations/runbook.md).
+
 Or run each part in its own terminal:
 
 ```powershell
@@ -70,7 +74,7 @@ instead of failing (E7-S6-AC2).
 Set-Location apps/backend
 uv run pytest                      # unit + integration (clinic_test schema); live and eval tests are opt-in
 uv run pytest -m live              # real Gemini and Telegram smoke tests
-uv run pytest -m eval tests/integration/test_agent_eval.py   # 35-scenario agent evaluation -> reports/eval-*.md
+uv run pytest -m eval tests/integration/test_agent_eval.py   # 38-scenario agent evaluation -> reports/eval-*.md
 ```
 
 Integration, live and evaluation runs share the `clinic_test` schema: run them one at a time. If Windows
