@@ -109,6 +109,21 @@ cap, which exists to keep the "fallback within 10 s when the model is unreachabl
 would break E1-S1-AC3; the remaining lever is model latency itself (option C: a faster or paid tier), and
 option B for the 3.9 s of database time. Turns in passing scenarios took a median 7.4 s (max 22 s).
 
+## Evening status (2026-11-04)
+
+- **Gemini quota reached.** The free tier allows **500 requests per day per project per model**
+  (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`, read from the API's 429 reply, QUOTA-01); today's evaluation
+  runs used it up, so from about 17:45 UTC every model call returned HTTP 429 until the reset (about 13:30 IST on
+  2026-11-05). The live bot shares the quota: until the reset, patients get the fallback reply with the clinic
+  phone number (E1-S1-AC3 and E7-S6-AC2 behaving as designed). Before the 429s, the same model had slowed to
+  11–37 s for a one-word reply.
+- **Not measured yet:** a clean production-settings run of the final suite (38 scenarios). AEV-PROD-03 was
+  invalidated by a network outage on this PC. To do after the quota resets: `EVAL_RUNS=2` at production settings.
+- **New checks with genuine evidence:** XA-02 known FAQ answer and XA-03 refusal shape (AEV-DIAG-04); BK-01 with
+  the date said back and every time grounded (AEV-DIAG-05). XA-01 (unknown specialty) has no genuine pass yet.
+- **Recommendation:** give the evaluation suite its own Gemini project or key, or a paid tier, so evaluation runs
+  can never use up the live bot's daily requests.
+
 ## Non-functional requirements
 
 | NFR | Status | Evidence |
@@ -130,6 +145,8 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
 | Item | Owner |
 |---|---|
 | Reply time: option A is in place (D-34); the remaining failures need option C (model latency) and benefit from B | Arman |
+| Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate project or key for evaluations, or a paid tier | Arman |
+| Run the final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets | Claude / Arman |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
 | BLK-06: a person taps through registration, booking and reminders in Telegram | Arman |
 | Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |

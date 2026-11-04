@@ -65,6 +65,7 @@ Logs never contain chat text, names, phone numbers or secrets (redaction in `obs
 | Port 3000 or 8000 already in use | Other programs on this PC | `-WebPort 3100`; `API_PORT=8010` in `.env` (rebuild the dashboard after changing it) |
 | `EADDRINUSE` after stopping a background run, or tests failing with 401s | A stopped shell left its `node`/`python` child running (it may also keep truncating `clinic_test`) | Find it: `Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='python.exe'"`; stop only that PID |
 | Bot replies "Sorry, I can't answer right now…" | Gemini slower than `LLM_TIMEOUT_SECONDS` per call, or the whole reply over `AGENT_TURN_BUDGET_SECONDS` | Provider latency (R-GEM-02); measured 11–37 s per minimal call on 2026-11-04 afternoon |
+| Every bot reply is the fallback; logs show `llm_unavailable … status=429` | Gemini free-tier daily quota used up (500 requests per day per model, QUOTA-01); evaluation runs count against the same quota | Wait for the reset (shown as `retryDelay` in the 429), or use a paid tier; give evaluations their own project or key |
 | Slow dashboard actions (booking ≈ 6 s) | Database in `eu-west-3`, ~128 ms per round trip (R-LAT-01) | Host the API next to the database, or move the project to `ap-south-1` |
 
 ## Database

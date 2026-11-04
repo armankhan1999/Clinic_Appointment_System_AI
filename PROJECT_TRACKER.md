@@ -26,7 +26,7 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 
 7 epics · 32 stories · 93 points · 100 acceptance criteria.
 
-**26 / 32 stories COMPLETED** (verified 2026-11-04), 6 TESTING. Epics E1, E3, E4, E6 COMPLETED; E2, E5, E7 TESTING. Open evidence gaps: E2-S1-AC3, E2-S2-AC4, E2-S5-AC1, E5-S1-AC1, E5-S2-AC1 (partly), E7-S1-AC1 (database bootstrap from a clean clone); NFR-01 not met on this PC. Details in the story tracker and RTM.
+**31 / 32 stories COMPLETED** (verified 2026-11-04 evening), 1 TESTING: E2-S1 (AC3 'no invented doctor' has no genuine evaluation pass yet; XA-01 only passed on a fallback, then the Gemini quota ran out). Epics E1, E3–E7 COMPLETED; E2 TESTING. NFR-01 not met on this PC. Details in the story tracker and RTM.
 
 ## Branches
 
@@ -43,9 +43,10 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 | SEC-ROT | Rotate the database password, Gemini key and bot token that were shared in chat | Arman | 2026-11-03 |
 | D-33 | ~~`cn@0.5.2`~~ Resolved: replaced by `clsx` 2.1.1 + `tailwind-merge` 3.7.0 | — | 2026-11-04 |
 | PR-1 | Review and merge PR #1 (`feat/m6-quality-e2e` → `main`); CI green on the PR | Arman | 2026-11-04 |
-| BLK-03 | Gemini free-tier RPM/RPD limits (AI Studio) | Arman | 2026-11-02 |
+| QUOTA | Gemini free tier: 500 requests/day per model (QUOTA-01, verified from the API's 429), shared by the live bot and the evaluation suite; used up on 2026-11-04 by evaluation runs. Use a separate project/key for evaluations or a paid tier | Arman | 2026-11-04 |
+| EVAL-FINAL | Final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets (~13:30 IST 2026-11-05) | Claude | 2026-11-04 |
 
-Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-04 Telegram token.
+Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (QUOTA-01), BLK-04 Telegram token.
 
 ## Risks
 
@@ -54,7 +55,7 @@ Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-04 Telegram token.
 | R-LAT-01 | Database in `eu-west-3`, clinic in India | 128 ms per round trip; median 3.9 s of each agent turn; staff booking ≈ 6 s (DB-LAT-01) | Run API/bot next to the database or move the project to `ap-south-1` |
 | R-GEM-02 | Free-tier model latency | median 5.5–5.7 s per turn; spikes past 8 s per call | Faster or paid tier; per-call timeout keeps the fallback within 10 s |
 | R-DB-TLS | Dev runs use unverified TLS until BLK-05 | `db_tls_unverified` warning on start | BLK-05 |
-| R-GEM-01 | Free-tier quotas unknown | Three full evaluation runs fit in one day on 2026-11-04 (not a quota measurement) | Check AI Studio limits |
+| R-GEM-01 | Free-tier quota | **Materialised 2026-11-04**: 500 requests/day per model; HTTP 429 from ~17:45 UTC (QUOTA-01) | Separate evaluation project/key; paid tier for the live bot |
 
 ## Session handoff — 2026-11-04
 
