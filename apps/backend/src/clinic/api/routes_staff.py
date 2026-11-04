@@ -124,11 +124,15 @@ async def availability(
     return AvailabilityOut(date, [SlotOut(s["start"], s["time_label"]) for s in slots])
 
 
-@router.get("/patients")
-async def patients(
-    principal: Staff, api: Api, phone: Annotated[str, Query(min_length=3, max_length=30)]
-) -> Items[PatientRefOut]:
-    return Items(await api.ops.find_patients(phone))
+class PhoneLookupIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    phone: str = Field(min_length=3, max_length=30)
+
+
+@router.post("/patients/lookup")
+async def patients(body: PhoneLookupIn, principal: Staff, api: Api) -> Items[PatientRefOut]:
+    """Exact match on the normalised phone. A POST body keeps the number out of URLs and their logs (L1)."""
+    return Items(await api.ops.find_patients(body.phone))
 
 
 @router.post("/appointments", status_code=201)

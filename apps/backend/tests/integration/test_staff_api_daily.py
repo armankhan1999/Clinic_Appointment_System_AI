@@ -225,13 +225,18 @@ async def test_walk_in_booking_and_the_shared_double_booking_rule(
             },
             headers=csrf,
         )
-        found = (await client.get("/api/v1/patients", params={"phone": "+12025550177"})).json()
+        # Review L1: the phone number travels in the body, never in a URL that proxies or browsers may log.
+        found = (
+            await client.post("/api/v1/patients/lookup", json={"phone": "+12025550177"}, headers=csrf)
+        ).json()
+        old_query_route = await client.get("/api/v1/patients", params={"phone": "+12025550177"})
     assert "10:00 AM" in [s["time_label"] for s in slots["slots"]]
     assert created.status_code == 201, created.text
     assert (created.json()["source"], created.json()["patient"]["full_name"]) == ("staff", "Ravi Kumar")
     assert again.status_code == 409
     assert again.json()["error"]["code"] == "SLOT_TAKEN", "E6-S4-AC2: the same database rule as the bot"
     assert [p["full_name"] for p in found["items"]] == ["Ravi Kumar"]
+    assert old_query_route.status_code == 404, "no route takes a phone number in the query string"
     async with session_factory() as session:
         walk_in = await session.scalar(select(Patient).where(Patient.phone == "+12025550177"))
     assert walk_in is not None

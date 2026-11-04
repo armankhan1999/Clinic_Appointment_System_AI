@@ -55,7 +55,7 @@ describe("BookingFlow", () => {
     await waitFor(() => expect(screen.queryByRole("radio", { name: "9:30 AM" })).toBeNull());
     expect(screen.getByRole("radio", { name: "9:45 AM" })).toBeTruthy();
 
-    const posts = calls.filter((c) => c.method === "POST");
+    const posts = calls.filter((c) => c.method === "POST" && c.url === "/api/v1/appointments");
     expect(posts).toHaveLength(1);
     expect(posts[0].body).toEqual({ doctor_id: "d-1", start: "2030-01-09T04:00:00Z", patient: { id: "p-1" } });
     expect(posts[0].headers["x-csrf-token"]).toBe("csrf-1");
@@ -83,14 +83,14 @@ describe("BookingFlow", () => {
     fireEvent.change(await screen.findByLabelText("Full name"), { target: { value: "Meera Iyer" } });
     fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
     expect(await screen.findByText("Ask the patient for consent before saving their details")).toBeTruthy();
-    expect(calls.some((c) => c.method === "POST")).toBe(false);
+    expect(calls.some((c) => c.method === "POST" && c.url === "/api/v1/appointments")).toBe(false);
 
     fireEvent.click(screen.getByRole("checkbox", { name: "The patient gave verbal consent" }));
     fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
 
     expect(await screen.findByRole("heading", { name: "Appointment booked" })).toBeTruthy();
     expect(screen.getByText("APT-000123")).toBeTruthy();
-    const post = calls.find((c) => c.method === "POST");
+    const post = calls.find((c) => c.method === "POST" && c.url === "/api/v1/appointments");
     expect(post?.body).toEqual({
       doctor_id: "d-1",
       start: "2030-01-09T04:15:00Z",

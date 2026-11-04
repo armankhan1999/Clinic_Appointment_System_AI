@@ -54,6 +54,8 @@ Every row records an actual run: command, date, environment, result counts and t
 | WEB-UNIT-04 | 2026-11-05 | Dashboard after the clinic-date change | `npm run lint; npx tsc --noEmit; npm run test` | Node 24.13.0 | 119 | 0 | 0 | review L4 | New: `useClinicToday` uses the API's date; the metrics test now routes its stub by URL |
 | API-TODAY-01 | 2026-11-05 | Clinic date endpoint | `test_today_is_the_clinic_date_not_the_server_or_pc_date` | `clinic_test` | 1 | 0 | 0 | D-40 | At 00:30 IST the API returns the clinic's date; 401 without a session |
 | DEV-01 | 2026-11-05 | Live development mode | `start.ps1 -Dev`, `restart.ps1 -Part api` | Dev PC | 2 | 0 | 0 | D-39 | Stack up in 29.1 s in dev mode; API restarted and ready in 7.5 s with the new endpoint. uvicorn `--reload` hung after its first reload (worker PID unchanged), so it was removed |
+| L1-01 | 2026-11-05 | Phone lookup by POST (review L1, D-41) | `pytest …::test_walk_in_booking_and_the_shared_double_booking_rule` + unit; `npm run test`; `npx playwright test tests/e2e/booking.spec.ts` | `clinic_test`; live stack | 1 + 226 + 120 + 2 | 0 | 0 | E6-S4-AC1 | Backend: POST /patients/lookup finds the walk-in, GET /patients now 404. Dashboard: the lookup is a POST with the phone in the body and the CSRF header; booking tests count only appointment POSTs. E2E booking 2/2 (desktop, tablet) |
+| AEV-PROD-05 | 2026-11-05 | Final evaluation, production settings | `uv run python -m pytest -m eval …` | `gemini-3.5-flash-lite` | — | — | stopped | — | **Stopped**: one probe succeeded at 02:39 IST, but by 03:25 IST every call returned HTTP 429 again (500/day used up; retry in 36,233 s ≈ 13:30 IST). No figure from this run is used |
 
 ## Evaluation suite (E7-S5) targets — source §3.9
 

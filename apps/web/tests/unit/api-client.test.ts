@@ -13,7 +13,7 @@ import {
   setSessionUserSource,
   setUnauthenticatedHandler,
 } from "@/lib/api/client";
-import { cancelAppointment, login, logout } from "@/lib/api/endpoints";
+import { cancelAppointment, findPatientsByPhone, login, logout } from "@/lib/api/endpoints";
 import { ApiError } from "@/lib/api/errors";
 
 import { errorEnvelope, jsonResponse, sessionBody, stubFetch } from "./helpers";
@@ -264,5 +264,16 @@ describe("CSRF retry never acts as a different user (M3)", () => {
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
     expect(changed).toHaveBeenCalledTimes(1);
     expect(getCsrfToken()).toBeNull();
+  });
+});
+
+describe("patient lookup", () => {
+  it("sends the phone number in a POST body, never in the URL (review L1)", async () => {
+    setCsrfToken("tok");
+    const { calls } = stubFetch([jsonResponse(200, { items: [] })]);
+    await findPatientsByPhone("+919876543210");
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual(["POST /api/v1/patients/lookup"]);
+    expect(calls[0].body).toEqual({ phone: "+919876543210" });
+    expect(calls[0].headers["x-csrf-token"]).toBe("tok");
   });
 });

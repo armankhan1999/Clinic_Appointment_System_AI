@@ -1,6 +1,6 @@
 # Project Tracker — Clinic Appointment Booking Agent
 
-Last updated: 2026-11-04 · Phase: **8 QA / 10 Final acceptance — built and tested; go-live decisions pending**
+Last updated: 2026-11-05 03:30 IST · Phase: **10 Final acceptance: application complete except the final model evaluation (Gemini daily quota) and owner actions**
 
 Detailed trackers: [epics](docs/tracking/epic-tracker.md) · [stories](docs/tracking/user-story-tracker.md) · [RTM](docs/tracking/requirement-traceability-matrix.md) · [tests](docs/tracking/test-execution-tracker.md) · [bugs](docs/tracking/bug-tracker.md) · [decisions](docs/tracking/decision-log.md) · [acceptance report](docs/testing/acceptance-report.md) · [security review](docs/security/security-review.md)
 
@@ -61,4 +61,11 @@ Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (Q
 
 - **Done:** staff API (daily + admin) and the dashboard merged; independent review of the dashboard (5 medium, 5 low) fixed test-first; secret scan and first push to GitHub; one-command start/stop; E2E on the live stack with clean console/network assertions; evaluation suite run (diagnostic 35/35, production budget 20/35) with every failure explained; traceability gaps closed with tests; final regression 414/0.
 - **Not done:** decisions and owner actions above; repeated evaluation runs for variance (`EVAL_RUNS`); Docker Compose (not verifiable here, D-31).
-- **Next task:** owner decision on reply time → implement it → re-run AEV at the production budget → push and confirm CI green.
+- **Next task:** after the Gemini quota resets (≈13:30 IST 2026-11-05) run the final 38-scenario evaluation at production settings (`uv run python -m pytest -m eval tests/integration/test_agent_eval.py` in apps/backend) to close E2-S1-AC3 and record the final §3.9 figures; then BLK-05, BLK-06 and credential rotation (owner).
+
+## Session log — 2026-11-05 (early morning)
+
+- Live project running for Arman: `scripts/start.ps1 -WebPort 3100 -Dev` (dashboard http://localhost:3100 via `next dev`; API 127.0.0.1:8010; Telegram bot). Dev admin `owner` created; password in git-ignored `logs/dashboard-login.txt`.
+- Merged to main: live development mode + `restart.ps1` (D-39), clinic date from the API (D-40), phone lookup by POST (D-41), CSP decision (D-42). All branches merged; `main` is the only branch.
+- Verified: M6-FULL-04 419/0, WEB-UNIT 120/0, E2E 18/18 (production build and dev server), booking E2E 2/2 after D-41.
+- Blocked: final evaluation (HTTP 429, free tier 500/day on flash-lite; 20/day on 3.5-flash).

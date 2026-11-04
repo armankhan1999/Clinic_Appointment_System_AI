@@ -62,8 +62,9 @@ export const getDoctors = (filter: { active?: boolean } = {}, signal?: AbortSign
 export const getAvailability = (doctorId: string, date: string, signal?: AbortSignal) =>
   apiRequest("/availability", availabilitySchema, { query: { doctor_id: doctorId, date }, signal });
 
+/** The phone number goes in a POST body so it never appears in a URL that proxies or browsers may log. */
 export const findPatientsByPhone = (phone: string, signal?: AbortSignal) =>
-  apiRequest("/patients", patientLookupSchema, { query: { phone }, signal });
+  apiRequest("/patients/lookup", patientLookupSchema, { method: "POST", body: { phone }, signal });
 
 export type NewAppointmentPatient = { id: string } | { full_name: string; phone: string; verbal_consent: true };
 

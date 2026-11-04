@@ -72,7 +72,7 @@ type Slot = { start: string; time_label: string };
 | `GET /attention` | — | `{ tickets: [{ id, reason, created_at, patient: PatientRef }], alerts: [{ id, created_at, patient: PatientRef \| null, telegram_user_id: number \| null }], flagged: Appointment[] }` — open tickets, unacknowledged alerts, appointments with `staff_attention` | E6-S2-AC3, E5-S3-AC3, E4-S4-AC2 |
 | `GET /doctors?active=true` | — | `{ items: [{ id, name, specialty, active }] }` | E6-S4 |
 | `GET /availability?doctor_id=&date=` | — | `{ date, slots: Slot[] }` (staff are not bound by the bot cut-off, GAP-21) | E6-S4 |
-| `GET /patients?phone=` | — | `{ items: PatientRef[] }` — exact match on normalised phone only, never a full listing | E6-S4-AC1 |
+| `POST /patients/lookup` | `{ phone }` | `{ items: PatientRef[] }` — exact match on the normalised phone only, never a full listing. A POST body keeps the number out of URLs and any log that records them (review L1, D-41) | E6-S4-AC1 |
 | `POST /appointments` | `{ doctor_id, start, patient: { id } \| { full_name, phone, verbal_consent: true } }` | `201 Appointment` (`source: "staff"`). `409 SLOT_TAKEN` from the same database rule as the bot (E6-S4-AC2). | E6-S4-AC1/AC2 |
 | `POST /appointments/{id}/cancel` | `{ reason }` (1–200 chars) | `200 Appointment`; queues a Telegram notice when the patient has a Telegram link | E6-S4-AC3, E4-S4-AC1 |
 | `POST /appointments/{id}/attendance` | `{ status: "completed" \| "no_show" }` | `200 Appointment`; `409 CONFLICT` if the start time has not passed; changing a mark later is admin only | E6-S5 |
