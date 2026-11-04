@@ -8,7 +8,7 @@ import { Controller, useForm } from "react-hook-form";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { Pill } from "@/components/status";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
@@ -18,12 +18,15 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createStaffUser, getStaffUsers, unlockStaffUser, updateStaffUser } from "@/lib/api/endpoints";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { StaffUser } from "@/lib/api/schemas";
 import { queryKeys } from "@/lib/query";
 import { useSession } from "@/lib/session";
 import { STAFF_PASSWORD_MIN, staffCreateSchema, type StaffCreateForm } from "@/lib/validation/forms";
 
 const ROLE_LABEL = { receptionist: "Receptionist", admin: "Clinic admin" } as const;
+
+const STAFF_API_FIELDS = { username: "username", display_name: "display_name", role: "role", password: "password" } as const;
 
 function CreateStaffDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
@@ -41,6 +44,7 @@ function CreateStaffDialog({ open, onOpenChange }: { open: boolean; onOpenChange
       form.reset(empty);
       onOpenChange(false);
     },
+    onError: (error) => applyApiFieldErrors(error, form.setError, STAFF_API_FIELDS),
   });
 
   const e = form.formState.errors;
@@ -131,7 +135,11 @@ function CreateStaffDialog({ open, onOpenChange }: { open: boolean; onOpenChange
               <FieldError errors={[e.confirmPassword]} />
             </Field>
           </FieldGroup>
-          <InlineError error={create.error} title="The account was not created" />
+          <InlineError
+            error={create.error}
+            title="The account was not created"
+            fieldsMarked={matchApiFields(create.error, STAFF_API_FIELDS).length > 0}
+          />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={create.isPending} onClick={() => onOpenChange(false)}>
               Close without saving
@@ -210,9 +218,10 @@ export function StaffAccounts() {
           </Button>
         }
       />
+      <RefetchNotice query={users} what="staff accounts" />
       {users.isPending ? (
         <LoadingState label="Loading staff accounts" />
-      ) : users.isError ? (
+      ) : users.isLoadingError ? (
         <ErrorState what="staff accounts" error={users.error} onRetry={() => users.refetch()} />
       ) : list.length === 0 ? (
         <EmptyState icon={Users} title="No staff accounts" action={<Button onClick={() => setCreating(true)}>Add staff account</Button>} />

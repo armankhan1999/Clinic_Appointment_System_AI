@@ -161,7 +161,10 @@ export const settingsFormSchema = z
     staff_hours_text: required("the front desk hours").max(400, { message: "Keep it under 400 characters" }),
     timezone: z.string().trim().refine(isValidTimeZone, { message: "Choose a valid time zone, e.g. Asia/Kolkata" }),
     emergency_number: required("the emergency number").max(40, { message: "Keep it under 40 characters" }),
-    emergencyPhrasesText: z.string(),
+    // Safety rule: with no phrases the assistant cannot detect emergencies (E5-S3), so never allow an empty list.
+    emergencyPhrasesText: z.string().refine((text) => parsePhrases(text).length > 0, {
+      message: "Add at least one phrase. Without phrases the assistant can't recognise emergencies.",
+    }),
     cutoff_minutes: wholeNumber("the cut-off in minutes", 0, 10_080),
     booking_window_days: wholeNumber("the number of days", 1, 365),
     max_upcoming_per_patient: wholeNumber("a limit", 1, 50),

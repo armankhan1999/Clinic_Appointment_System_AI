@@ -10,7 +10,7 @@ import {
   markAttendance,
   resolveTicket,
 } from "@/lib/api/endpoints";
-import { isApiError } from "@/lib/api/errors";
+import { isApiError, isOutcomeUnknown } from "@/lib/api/errors";
 import { queryKeys } from "@/lib/query";
 
 /** Mutations used on the Today screen. Every success refreshes the schedule and the attention panel. */
@@ -24,9 +24,12 @@ export function useDayActions() {
       queryClient.invalidateQueries({ queryKey: queryKeys.attention }),
     ]);
 
-  // Someone else changed the same record; show fresh data behind the still-open dialog.
+  // Someone else changed the same record, or the answer never arrived and the write may have
+  // happened: show fresh data behind the still-open dialog.
   const refreshOnConflict = (error: unknown) => {
-    if (isApiError(error) && ["ALREADY_CANCELLED", "CONFLICT", "NOT_FOUND"].includes(error.code)) void refresh();
+    if (isOutcomeUnknown(error) || (isApiError(error) && ["ALREADY_CANCELLED", "CONFLICT", "NOT_FOUND"].includes(error.code))) {
+      void refresh();
+    }
   };
 
   const cancel = useMutation({

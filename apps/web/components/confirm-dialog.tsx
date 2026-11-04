@@ -3,7 +3,7 @@
 import { LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { InlineError } from "@/components/states";
+import { InlineError, type UnknownOutcomeCopy } from "@/components/states";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -30,6 +30,7 @@ export function ConfirmDialog({
   destructive = false,
   pending,
   error,
+  unknownOutcome,
   onConfirm,
 }: {
   open: boolean;
@@ -42,6 +43,8 @@ export function ConfirmDialog({
   destructive?: boolean;
   pending: boolean;
   error?: unknown;
+  /** Wording for a write that got no answer (it may have happened). */
+  unknownOutcome?: UnknownOutcomeCopy;
   onConfirm: () => void;
 }) {
   return (
@@ -54,7 +57,7 @@ export function ConfirmDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         {children}
-        <InlineError error={error} />
+        <InlineError error={error} unknownOutcome={unknownOutcome} />
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
           <Button

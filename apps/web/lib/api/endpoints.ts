@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 import { apiRequest, apiRequestNoContent, setCsrfToken } from "./client";
 import {
   alertAcknowledgedSchema,
@@ -126,9 +128,28 @@ export const deleteLeave = (doctorId: string, leaveId: string) =>
 /* Administration: FAQ, settings, audit, metrics, staff */
 
 export const MAX_PAGE_SIZE = 100;
+/** Safety stop for whole-list reads: 5,000 rows is far beyond one clinic's FAQ or staff list. */
+const MAX_LIST_PAGES = 50;
 
-export const getFaqEntries = (signal?: AbortSignal) =>
-  apiRequest("/faq", pageOf(faqEntrySchema), { query: { page: 1, page_size: MAX_PAGE_SIZE }, signal });
+/**
+ * Reads every page of a small paginated list (FAQ entries, staff accounts) so nothing past
+ * the API's 100-per-page maximum is silently dropped. Stops at `total`, on an empty page, or
+ * at MAX_LIST_PAGES.
+ */
+async function getAllPages<S extends z.ZodType>(path: string, item: S, signal?: AbortSignal) {
+  const schema = pageOf(item);
+  const items: z.infer<S>[] = [];
+  let total = 0;
+  for (let page = 1; page <= MAX_LIST_PAGES; page += 1) {
+    const result = await apiRequest(path, schema, { query: { page, page_size: MAX_PAGE_SIZE }, signal });
+    items.push(...result.items);
+    total = result.total;
+    if (result.items.length === 0 || items.length >= total) break;
+  }
+  return { items, total };
+}
+
+export const getFaqEntries = (signal?: AbortSignal) => getAllPages("/faq", faqEntrySchema, signal);
 
 export type FaqInput = { topic: string; aliases: string[]; answer: string };
 
@@ -167,7 +188,7 @@ export const getWeeklyMetrics = (weekStart: string, signal?: AbortSignal) =>
   apiRequest("/metrics/weekly", weeklyMetricsSchema, { query: { week_start: weekStart }, signal });
 
 export const getStaffUsers = (signal?: AbortSignal) =>
-  apiRequest("/staff-users", pageOf(staffUserSchema), { query: { page: 1, page_size: MAX_PAGE_SIZE }, signal });
+  getAllPages("/staff-users", staffUserSchema, signal);
 
 export const createStaffUser = (input: { username: string; display_name: string; role: Role; password: string }) =>
   apiRequest("/staff-users", staffUserSchema, { method: "POST", body: input });

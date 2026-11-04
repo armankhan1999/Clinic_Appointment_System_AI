@@ -4,7 +4,7 @@ import { LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
-import { ErrorState, ForbiddenState } from "@/components/states";
+import { ErrorState, ForbiddenState, RefetchNotice } from "@/components/states";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isApiError } from "@/lib/api/errors";
 import { useSession } from "@/lib/session";
@@ -24,7 +24,9 @@ export function StaffGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (session.isError) {
+  // Only a first load that failed blocks the app. A failed background refresh keeps the shell,
+  // the page and anything typed into it, and shows a notice instead.
+  if (session.isLoadingError) {
     if (isApiError(session.error) && session.error.status === 401) {
       return (
         <p role="status" className="flex items-center gap-2 p-8 text-muted-foreground">
@@ -40,7 +42,16 @@ export function StaffGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <AppShell user={session.data.user}>{children}</AppShell>;
+  return (
+    <AppShell user={session.data.user}>
+      {session.isRefetchError ? (
+        <div className="mb-4">
+          <RefetchNotice query={session} what="your account" />
+        </div>
+      ) : null}
+      {children}
+    </AppShell>
+  );
 }
 
 /** Hides admin screens from receptionists (E6-S1-AC4). The API is the real enforcement point. */
