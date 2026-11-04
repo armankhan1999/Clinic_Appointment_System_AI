@@ -23,12 +23,13 @@ def result(
     tools: list[str],
     seconds: float = 1.0,
     correct_tools: bool = True,
+    run: int = 1,
 ) -> ScenarioResult:
     return ScenarioResult(
         scenario_id=scenario_id,
         category=category,
         title=f"title {scenario_id}",
-        run=1,
+        run=run,
         expected="one booking with Dr. Meera Iyer",
         passed=passed,
         failures=[] if passed else ["nothing was booked"],
@@ -96,4 +97,19 @@ def test_scenarios_match_section_3_9() -> None:
     from tests.integration.eval_scenarios import SCENARIOS
 
     assert Counter(s.category for s in SCENARIOS) == {c: count for c, (count, _) in TARGETS.items()}
-    assert len({s.id for s in SCENARIOS}) == len(SCENARIOS) == 35
+    assert len({s.id for s in SCENARIOS}) == len(SCENARIOS) == 38
+    assert sum(1 for s in SCENARIOS if s.category is not Category.EXTRA) == 35, "PRD section 3.9"
+
+
+def test_each_run_is_rated_separately_so_variance_shows() -> None:
+    results = [
+        result("BK-01", Category.BOOKING, passed=True, tools=[], run=1),
+        result("BK-02", Category.BOOKING, passed=True, tools=[], run=1),
+        result("BK-01", Category.BOOKING, passed=True, tools=[], run=2),
+        result("BK-02", Category.BOOKING, passed=False, tools=[], run=2),
+    ]
+    summary = summarise(results)
+    booking = next(c for c in summary.categories if c.category is Category.BOOKING)
+    assert booking.run_rates == [1.0, 0.5]
+    assert booking.rate == 0.75
+    assert "100%, 50%" in render_markdown(summary, results, META)

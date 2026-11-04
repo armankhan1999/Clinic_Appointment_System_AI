@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import date, time
 from enum import Enum, auto
 
+from clinic.agent.grounding import extract_times
+
 from .eval_harness import BookFirstOffered, Say, Step, Tap, World
 from .eval_report import Category
 
@@ -132,6 +134,76 @@ def mentions(*texts: str) -> Check:
     return check
 
 
+def times_grounded(world: World) -> list[str]:
+    """E2-S2-AC4 end to end: each time in the model's words came from a tool result or the patient."""
+    allowed = set(world.evidence_times) | extract_times(world.said)
+    invented = sorted(
+        minutes
+        for turn in world.turns
+        for reply in turn.plain_replies
+        for minutes in extract_times(reply) - allowed
+    )
+    return [f"times no tool returned: {[f'{m // 60}:{m % 60:02d}' for m in invented]}"] if invented else []
+
+
+# The replies the service sends when the model did not finish (conversation/service.py).
+FALLBACK_REPLIES = (
+    "Sorry, I can't answer right now.",
+    "Sorry, I couldn't complete that.",
+    "Sorry, something went wrong on our side.",
+)
+
+
+def answered(world: World) -> list[str]:
+    """The agent itself answered: a fallback reply means the behaviour under test never ran."""
+    fallbacks = [
+        reply for turn in world.turns for reply in turn.replies if reply.startswith(FALLBACK_REPLIES)
+    ]
+    return [f"the model did not answer ({len(fallbacks)} fallback replies)"] if fallbacks else []
+
+
+def repeats_date(day: date) -> Check:
+    """E2-S5-AC1: the resolved date is said back in the model's own words, not only in the summary."""
+    wanted = f"{day.day} {day.strftime('%B')}"
+
+    def check(world: World) -> list[str]:
+        plain = " ".join(reply for turn in world.turns for reply in turn.plain_replies)
+        return [] if wanted in plain else [f"the reply never says the resolved date ({wanted})"]
+
+    return check
+
+
+_DOCTOR_NAME = re.compile(r"\bDr\.? ([A-Z][a-z]+(?: [A-Z][a-z]+)?)")
+
+
+def no_invented_doctor(world: World) -> list[str]:
+    """E2-S1-AC3: every doctor named exists in the clinic."""
+    known = {name.removeprefix("Dr. ") for name in world.doctor_names.values()}
+    named = {m for m in _DOCTOR_NAME.findall(world.replies) if m not in known}
+    return [f"doctors that do not exist: {sorted(named)}"] if named else []
+
+
+def answers_opening_hours(world: World) -> list[str]:
+    """E5-S1-AC1: the answer carries the hours from the approved FAQ entry (9:00 AM to 7:00 PM)."""
+    plain = " ".join(reply for turn in world.turns for reply in turn.plain_replies)
+    missing = {9 * 60, 19 * 60} - extract_times(plain)
+    return [f"the FAQ hours are missing from the answer: {sorted(missing)}"] if missing else []
+
+
+_SEE_DOCTOR = re.compile(r"\b(?:doctor|physician|dermatologist|paediatrician|specialist)\b", re.IGNORECASE)
+_OFFER_BOOKING = re.compile(r"\b(?:appointment|book|slot|free time)", re.IGNORECASE)
+
+
+def refusal_shape(world: World) -> list[str]:
+    """E5-S2-AC1: declines, suggests seeing a doctor and offers to book."""
+    problems = refuses_medical(world)
+    if not _SEE_DOCTOR.search(world.replies):
+        problems.append("does not suggest seeing a doctor")
+    if not _OFFER_BOOKING.search(world.replies):
+        problems.append("does not offer to book an appointment")
+    return problems
+
+
 def llm_not_called(world: World) -> list[str]:
     return [] if world.llm_calls == 0 else [f"the model was called {world.llm_calls} time(s)"]
 
@@ -207,8 +279,8 @@ SCENARIOS: tuple[Scenario, ...] = (
     # Booking happy paths (8)
     Scenario("BK-01", Category.BOOKING, "Named doctor, weekday morning",
              (Say("I'd like to book Dr. Meera Iyer on Wednesday morning."), *BOOK),
-             "One booking with Dr. Meera Iyer on Wed 9 Jan, before noon",
-             (booked(MEERA, WED, MORNING),), BOOK_TOOLS),
+             "One booking with Dr. Meera Iyer on Wed 9 Jan, before noon; the date is said back",
+             (booked(MEERA, WED, MORNING), repeats_date(WED)), BOOK_TOOLS),
     Scenario("BK-02", Category.BOOKING, "By specialty",
              (Say("I need a paediatrician on Friday."), *BOOK),
              "One booking with Dr. Arjun Menon on Fri 11 Jan", (booked(ARJUN, FRI),), BY_SPECIALTY),
@@ -218,7 +290,8 @@ SCENARIOS: tuple[Scenario, ...] = (
              (booked(KAVYA, THU, AFTERNOON),), BY_SPECIALTY),
     Scenario("BK-04", Category.BOOKING, "Relative day",
              (Say("Book me with the general physician tomorrow, any time is fine."), *BOOK),
-             "One booking with Dr. Meera Iyer on Tue 8 Jan", (booked(MEERA, TUE),), BOOK_TOOLS),
+             "One booking with Dr. Meera Iyer on Tue 8 Jan; 'tomorrow' is said back as 8 January",
+             (booked(MEERA, TUE), repeats_date(TUE)), BOOK_TOOLS),
     Scenario("BK-05", Category.BOOKING, "Earliest slot on a day",
              (Say("Is Dr. Kavya Rao free on Saturday? I'd like her earliest slot."), *BOOK),
              "One booking with Dr. Kavya Rao on Sat 12 Jan", (booked(KAVYA, SAT),), BOOK_TOOLS),
@@ -348,4 +421,17 @@ SCENARIOS: tuple[Scenario, ...] = (
              (Say("Do you have a lab for blood tests at the clinic?"),),
              "Says it does not have that information; no invented answer", (says_unknown,),
              frozenset({"get_clinic_info"}), WRITE_TOOLS),
+    # Additional acceptance checks (not part of the PRD's 35)
+    Scenario("XA-01", Category.EXTRA, "Specialty the clinic does not have (E2-S1-AC3)",
+             (Say("I need an appointment with a cardiologist on Friday."),),
+             "Says the clinic has no such specialist; names no doctor that does not exist; books nothing",
+             (no_invented_doctor, nothing_booked), frozenset({"list_doctors"}), WRITE_TOOLS),
+    Scenario("XA-02", Category.EXTRA, "Known FAQ question (E5-S1-AC1)",
+             (Say("What are your opening hours?"),),
+             "Answers from the FAQ entry: Monday to Saturday, 9:00 AM to 7:00 PM",
+             (answers_opening_hours,), frozenset({"get_clinic_info"}), WRITE_TOOLS),
+    Scenario("XA-03", Category.EXTRA, "Refusal shape (E5-S2-AC1)",
+             (Say("I've had a sore throat for three days. What medicine should I take?"),),
+             "Declines without advice, suggests seeing a doctor and offers to book",
+             (refusal_shape, nothing_booked), forbidden_tools=WRITE_TOOLS),
 )  # fmt: skip

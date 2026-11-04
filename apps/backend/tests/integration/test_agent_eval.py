@@ -26,7 +26,7 @@ from seed import run_seed
 from .conftest import BACKEND_DIR
 from .eval_harness import CountingLLM, ScriptedPatient, build_conversation, patient_appointments, snapshot
 from .eval_report import ScenarioResult, render_markdown, summarise, to_json
-from .eval_scenarios import SCENARIOS, THU, TODAY, TUE, WED, Scenario, Setup
+from .eval_scenarios import SCENARIOS, THU, TODAY, TUE, WED, Scenario, Setup, answered, times_grounded
 from .factories import make_appointment, make_patient
 
 pytestmark = pytest.mark.eval
@@ -143,8 +143,13 @@ async def test_scenario(
     service, audit = build_conversation(settings, session_factory, lambda: NOW, llm, _budget(settings))
     patient = ScriptedPatient(service, USER, llm, audit)
     script_failures = await patient.run(scenario.steps)
-    world = await snapshot(session_factory, patient_id, IST, before, llm.calls, patient.turns)
-    failures = script_failures + [problem for check in scenario.checks for problem in check(world)]
+    world = await snapshot(
+        session_factory, patient_id, IST, before, llm.calls, patient.turns, frozenset(llm.evidence_times)
+    )
+    # Every scenario: no invented times (E2-S2-AC4), and a fallback reply is never a pass. Emergencies are
+    # answered by code before the model, so they never produce a fallback.
+    checks = (*scenario.checks, times_grounded, answered)
+    failures = script_failures + [problem for check in checks for problem in check(world)]
     if forbidden := sorted(scenario.forbidden_tools & set(world.tools)):
         failures.append(f"called tools this scenario must never call: {forbidden}")
     result = ScenarioResult(

@@ -4,6 +4,7 @@ Wiring mirrors clinic.runtime.build_bot_runtime (same prompt, tools, audit write
 clock is pinned so seeded schedules give the same free slots on every run.
 """
 
+import json
 import time as perf
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -16,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from clinic.agent.grounding import extract_times
-from clinic.agent.llm import LLM, LlmTurn, LlmUnavailableError, TranscriptItem
+from clinic.agent.llm import LLM, LlmTurn, LlmUnavailableError, ToolResults, TranscriptItem
 from clinic.agent.loop import AgentLoop, AuditEntry, db_audit_writer
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.tools import AgentServices, ToolSpec, build_registry
@@ -71,11 +72,16 @@ class CountingLLM:
         self.calls = 0
         self.seconds = 0.0
         self.errors: list[str] = []
+        self.evidence_times: set[int] = set()  # clock times in every tool result the model was shown
 
     async def generate(
         self, *, system: str, transcript: Sequence[TranscriptItem], tools: Sequence[ToolSpec[Any]]
     ) -> LlmTurn:
         self.calls += 1
+        for item in transcript:
+            if isinstance(item, ToolResults):
+                for _, result in item.results:
+                    self.evidence_times |= extract_times(json.dumps(result.payload(), default=str))
         started = perf.perf_counter()
         try:
             return await self._inner.generate(system=system, transcript=transcript, tools=tools)
@@ -159,6 +165,7 @@ class ScriptedPatient:
                 seconds=round(seconds, 3),
                 errors=tuple(self.llm.errors[error_mark:]),
                 llm_seconds=round(self.llm.seconds - model_mark, 3),
+                plain_replies=tuple(r.text for r in replies if not r.inline_buttons),
             )
         )
 
@@ -223,6 +230,7 @@ class World:
     foreign_phones: frozenset[str]
     llm_calls: int
     turns: list[Turn]
+    evidence_times: frozenset[int] = frozenset()  # minutes after midnight seen in tool results
 
     @property
     def said(self) -> str:
@@ -267,6 +275,7 @@ async def snapshot(
     before: dict[UUID, str],
     llm_calls: int,
     turns: list[Turn],
+    evidence_times: frozenset[int] = frozenset(),
 ) -> World:
     async with session_factory() as session:
         doctors = {d.id: d.name for d in (await session.scalars(select(Doctor))).all()}
@@ -285,4 +294,5 @@ async def snapshot(
         foreign_phones=frozenset(phone for p in others if (phone := p.phone)),
         llm_calls=llm_calls,
         turns=turns,
+        evidence_times=evidence_times,
     )
