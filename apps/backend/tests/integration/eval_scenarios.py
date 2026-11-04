@@ -275,7 +275,7 @@ SCENARIOS: tuple[Scenario, ...] = (
              "Nothing booked", (nothing_booked,), frozenset({"check_availability"})),
     Scenario("ED-04", Category.EDGE, "Cancel inside the 2-hour cut-off",
              (Say("Please cancel my appointment today."), Tap("Confirm cancel", optional=True)),
-             "Not cancelled; the agent declines and gives the clinic phone number (E3-S3-AC3)",
+             "Not cancelled; the agent declines and gives the clinic phone number (E3-S3-AC4)",
              (existing_is("booked"), mentions(CLINIC_PHONE), nothing_booked), forbidden_tools=frozenset(),
              setup=Setup.CUTOFF_BOOKING),
     Scenario("ED-05", Category.EDGE, "Beyond the 30-day booking window",
