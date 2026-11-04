@@ -141,6 +141,7 @@ class ScriptedPatient:
     audit: list[AuditEntry]
     turns: list[Turn] = field(default_factory=list)
     last: list[Reply] = field(default_factory=list)
+    shown: list[Reply] = field(default_factory=list)  # every reply so far, oldest first
 
     async def _turn(self, said: str, send: Callable[[], Any]) -> None:
         audit_mark, error_mark, model_mark = len(self.audit), len(self.llm.errors), self.llm.seconds
@@ -148,6 +149,7 @@ class ScriptedPatient:
         replies: list[Reply] = await send()
         seconds = perf.perf_counter() - started
         self.last = replies
+        self.shown.extend(replies)
         self.turns.append(
             Turn(
                 said=said,
@@ -166,8 +168,9 @@ class ScriptedPatient:
     async def tap(self, label: str, data: str) -> None:
         await self._turn(f"[tap] {label}", lambda: self.service.handle_callback(self.user, data))
 
-    def _button(self, label: str) -> str | None:
-        for reply in self.last:
+    def _button(self, label: str, replies: Sequence[Reply] | None = None) -> str | None:
+        """The most recent button with this label, as a patient would tap the summary above."""
+        for reply in reversed(self.shown if replies is None else replies):
             for row in reply.inline_buttons:
                 for button in row:
                     if button.text == label and button.callback_data:
@@ -181,6 +184,8 @@ class ScriptedPatient:
                 case Say(text):
                     await self.say(text)
                 case BookFirstOffered(template, optional):
+                    if self._button("Confirm", self.last) is not None:
+                        continue  # a summary is already on screen: the patient taps it (next step)
                     shown = " ".join(
                         [r.text for r in self.last]
                         + [b.text for r in self.last for row in r.inline_buttons for b in row]

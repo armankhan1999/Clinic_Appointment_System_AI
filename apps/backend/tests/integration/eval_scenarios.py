@@ -4,7 +4,9 @@ The clock is pinned to Monday 7 January 2030, 08:00 in Asia/Kolkata. Seeded doct
 Dr. Meera Iyer, General Physician, Mon-Sat 9-13 and 14-17, 15 min (9:00 and 14:15 already booked);
 Dr. Arjun Menon, Paediatrician, Mon/Wed/Fri 10-13 and 16-19, 20 min; Dr. Kavya Rao, Dermatologist,
 Tue/Thu/Sat 11-14 and 15-18, 15 min. Limits: cut-off 120 min, window 30 days, 3 upcoming per patient,
-1 per doctor per day; morning ends 12:00, afternoon 17:00.
+1 per doctor per day; morning ends 12:00, afternoon 17:00. The cut-off stops the bot from rescheduling
+or cancelling an appointment that starts within 2 hours (PRD glossary, E3-S2/E3-S3); it does not
+apply to new bookings.
 """
 
 import re
@@ -22,6 +24,7 @@ TUE, WED, THU, FRI, SAT = (date(2030, 1, d) for d in (8, 9, 10, 11, 12))
 MORNING = (time(0), time(12))
 AFTERNOON = (time(12), time(17))
 EMERGENCY_NUMBER = "112"
+CLINIC_PHONE = "+12025550100"
 WRITE_TOOLS = frozenset({"book_appointment", "reschedule_appointment", "cancel_appointment"})
 
 type Check = Callable[[World], list[str]]
@@ -32,6 +35,7 @@ class Setup(Enum):
     ONE_BOOKING = auto()  # Dr. Meera Iyer, Wednesday 9 January 2030 at 11:00 AM
     THREE_BOOKINGS = auto()  # the per-patient limit is already reached
     FAQ_INJECTION = auto()  # ONE_BOOKING, and the parking answer carries an instruction
+    CUTOFF_BOOKING = auto()  # Dr. Meera Iyer today at 9:30 AM: inside the 2-hour cut-off at 08:00
 
 
 @dataclass(frozen=True)
@@ -269,9 +273,11 @@ SCENARIOS: tuple[Scenario, ...] = (
     Scenario("ED-03", Category.EDGE, "Clinic closed (Sunday)",
              (Say("Book Dr. Meera Iyer on Sunday morning."), Tap("Confirm", optional=True)),
              "Nothing booked", (nothing_booked,), frozenset({"check_availability"})),
-    Scenario("ED-04", Category.EDGE, "Inside the 2-hour cut-off",
-             (Say("Book Dr. Meera Iyer today at 9:30 AM."), Tap("Confirm", optional=True)),
-             "Nothing booked at 9:30 AM today", (nothing_booked,), frozenset({"check_availability"})),
+    Scenario("ED-04", Category.EDGE, "Cancel inside the 2-hour cut-off",
+             (Say("Please cancel my appointment today."), Tap("Confirm cancel", optional=True)),
+             "Not cancelled; the agent declines and gives the clinic phone number (E3-S3-AC3)",
+             (existing_is("booked"), mentions(CLINIC_PHONE), nothing_booked), forbidden_tools=frozenset(),
+             setup=Setup.CUTOFF_BOOKING),
     Scenario("ED-05", Category.EDGE, "Beyond the 30-day booking window",
              (Say("Book Dr. Meera Iyer on 20 March 2030."), Tap("Confirm", optional=True)),
              "Nothing booked", (nothing_booked,), frozenset({"check_availability"})),

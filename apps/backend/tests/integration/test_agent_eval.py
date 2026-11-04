@@ -6,7 +6,7 @@ integration run uses the same test schema.
 """
 
 import os
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, date, datetime, time
 from pathlib import Path
 from uuid import UUID
@@ -48,6 +48,15 @@ _started = datetime.now(UTC)
 
 
 @pytest.fixture(scope="session")
+async def gemini(settings: Settings) -> AsyncIterator[GeminiLLM]:
+    """One client for the whole run, as in production (one per process)."""
+    # A diagnostic budget also relaxes the per-call limit; unset, both are the production setting.
+    llm = GeminiLLM(settings.gemini_api_key, settings.gemini_model, _budget(settings))
+    yield llm
+    await llm.aclose()
+
+
+@pytest.fixture(scope="session")
 def eval_results(settings: Settings) -> Iterator[list[ScenarioResult]]:
     results: list[ScenarioResult] = []
     yield results
@@ -75,7 +84,10 @@ def eval_results(settings: Settings) -> Iterator[list[ScenarioResult]]:
 async def _prepare(session_factory: Factory, setup: Setup) -> UUID:
     await run_seed(session_factory, clinic_timezone="Asia/Kolkata", today=TODAY)
     async with session_factory() as session:
-        patient = await make_patient(session, telegram_user_id=USER.telegram_user_id, name="Kiran Das")
+        # Outside the seed's +120255501xx phones (uq_patients_phone).
+        patient = await make_patient(
+            session, telegram_user_id=USER.telegram_user_id, name="Kiran Das", phone="+12025550190"
+        )
         doctors = {d.name: d for d in (await session.scalars(select(Doctor))).all()}
         if setup in (Setup.ONE_BOOKING, Setup.FAQ_INJECTION):
             await make_appointment(
@@ -91,6 +103,10 @@ async def _prepare(session_factory: Factory, setup: Setup) -> UUID:
             await make_appointment(
                 session, doctor=doctors["Dr. Kavya Rao"], patient=patient, start=_at(THU, 12)
             )
+        if setup is Setup.CUTOFF_BOOKING:
+            await make_appointment(
+                session, doctor=doctors["Dr. Meera Iyer"], patient=patient, start=_at(TODAY, 9, 30)
+            )
         if setup is Setup.FAQ_INJECTION:
             await session.execute(
                 update(ClinicInfo).where(ClinicInfo.topic == "parking").values(answer=INJECTED_FAQ)
@@ -103,8 +119,8 @@ def _budget(settings: Settings) -> float:
     return float(BUDGET_OVERRIDE) if BUDGET_OVERRIDE else settings.llm_timeout_seconds
 
 
-def _at(day: date, hour: int) -> datetime:
-    return datetime.combine(day, time(hour), tzinfo=IST)
+def _at(day: date, hour: int, minute: int = 0) -> datetime:
+    return datetime.combine(day, time(hour, minute), tzinfo=IST)
 
 
 @pytest.mark.parametrize(("scenario", "run"), CASES, ids=[f"{s.id}-r{run}" for s, run in CASES])
@@ -114,10 +130,11 @@ async def test_scenario(
     settings: Settings,
     session_factory: Factory,
     eval_results: list[ScenarioResult],
+    gemini: GeminiLLM,
 ) -> None:
     patient_id = await _prepare(session_factory, scenario.setup)
     before = {a.id: a.status for a in await patient_appointments(session_factory, patient_id)}
-    llm = CountingLLM(GeminiLLM(settings.gemini_api_key, settings.gemini_model, settings.llm_timeout_seconds))
+    llm = CountingLLM(gemini)
     service, audit = build_conversation(settings, session_factory, lambda: NOW, llm, _budget(settings))
     patient = ScriptedPatient(service, USER, llm, audit)
     script_failures = await patient.run(scenario.steps)
