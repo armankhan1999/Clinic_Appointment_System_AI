@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { Pill } from "@/components/status";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,12 @@ import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createDoctor, getDoctors, updateDoctor } from "@/lib/api/endpoints";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { Doctor } from "@/lib/api/schemas";
 import { queryKeys } from "@/lib/query";
 import { doctorFormSchema, type DoctorForm } from "@/lib/validation/forms";
+
+const DOCTOR_API_FIELDS = { name: "name", specialty: "specialty" } as const;
 
 function DoctorFormDialog({
   open,
@@ -47,6 +50,7 @@ function DoctorFormDialog({
       await queryClient.invalidateQueries({ queryKey: queryKeys.doctorsAll });
       onOpenChange(false);
     },
+    onError: (error) => applyApiFieldErrors(error, form.setError, DOCTOR_API_FIELDS),
   });
 
   const errors = form.formState.errors;
@@ -79,7 +83,7 @@ function DoctorFormDialog({
               <FieldError errors={[errors.specialty]} />
             </Field>
           </FieldGroup>
-          <InlineError error={save.error} />
+          <InlineError error={save.error} fieldsMarked={matchApiFields(save.error, DOCTOR_API_FIELDS).length > 0} />
           <DialogFooter>
             <Button type="button" variant="outline" disabled={save.isPending} onClick={() => onOpenChange(false)}>
               Close without saving
@@ -131,9 +135,10 @@ export function DoctorsList() {
         }
       />
 
+      <RefetchNotice query={doctors} what="doctors" />
       {doctors.isPending ? (
         <LoadingState label="Loading doctors" />
-      ) : doctors.isError ? (
+      ) : doctors.isLoadingError ? (
         <ErrorState what="doctors" error={doctors.error} onRetry={() => doctors.refetch()} />
       ) : doctors.data.items.length === 0 ? (
         <EmptyState

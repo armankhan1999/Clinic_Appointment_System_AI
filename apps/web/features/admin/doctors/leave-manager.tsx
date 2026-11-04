@@ -8,13 +8,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { createLeave, deleteLeave, getLeaves, previewLeave } from "@/lib/api/endpoints";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import { isApiError } from "@/lib/api/errors";
 import { appointmentSchema, type Appointment, type Leave } from "@/lib/api/schemas";
 import { formatLongDate, todayIso } from "@/lib/dates";
@@ -62,6 +63,7 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
       setAcknowledged(false);
       setReview({ date: values.date, reason: values.reason.trim(), affected: result.affected });
     },
+    onError: (error) => applyApiFieldErrors(error, form.setError, { date: "date" }),
   });
 
   const create = useMutation({
@@ -138,7 +140,7 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
                 <FieldError errors={[errors.reason]} />
               </Field>
             </FieldGroup>
-            <InlineError error={preview.error} />
+            <InlineError error={preview.error} fieldsMarked={matchApiFields(preview.error, { date: "date" }).length > 0} />
             <Button type="submit" disabled={preview.isPending}>
               {preview.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Search aria-hidden />}
               Check bookings on this day
@@ -201,9 +203,10 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
         <h3 id="leave-list" className="text-title font-bold">
           Upcoming leave
         </h3>
+        <RefetchNotice query={leaves} what="leave days" />
         {leaves.isPending ? (
           <LoadingState label="Loading leave days" rows={2} />
-        ) : leaves.isError ? (
+        ) : leaves.isLoadingError ? (
           <ErrorState what="leave days" error={leaves.error} onRetry={() => leaves.refetch()} />
         ) : upcoming.length === 0 ? (
           <EmptyState icon={CalendarOff} title="No upcoming leave" description={`${doctorName} is available on all working days.`} />

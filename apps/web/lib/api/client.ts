@@ -48,8 +48,10 @@ if (typeof window !== "undefined") {
 }
 
 let csrfToken: string | null = null;
-let csrfRefresh: Promise<string> | null = null;
+let sessionRefresh: Promise<Session> | null = null;
 let unauthenticatedHandler: (() => void) | null = null;
+let sessionUserSource: (() => string | null) | null = null;
+let sessionChangedHandler: (() => void) | null = null;
 
 export function setCsrfToken(token: string | null): void {
   csrfToken = token;
@@ -64,6 +66,25 @@ export function setUnauthenticatedHandler(handler: (() => void) | null): () => v
   unauthenticatedHandler = handler;
   return () => {
     if (unauthenticatedHandler === handler) unauthenticatedHandler = null;
+  };
+}
+
+/**
+ * Tells the client which staff user the app is currently showing (the cached session in
+ * lib/session.ts). Used so a CSRF retry never runs as a different user. Returns an unregister function.
+ */
+export function setSessionUserSource(source: (() => string | null) | null): () => void {
+  sessionUserSource = source;
+  return () => {
+    if (sessionUserSource === source) sessionUserSource = null;
+  };
+}
+
+/** Registers the app-wide reaction when the cookie now belongs to another user (clear and reload). */
+export function setSessionChangedHandler(handler: (() => void) | null): () => void {
+  sessionChangedHandler = handler;
+  return () => {
+    if (sessionChangedHandler === handler) sessionChangedHandler = null;
   };
 }
 
@@ -198,7 +219,20 @@ async function execute(path: string, options: RequestOptions, isRetry = false): 
     const staleToken = response.status === 403 && error.details?.reason === "csrf";
     if (staleToken && UNSAFE_METHODS.has(method) && options.csrf !== false && !isRetry) {
       setCsrfToken(null);
-      await refreshCsrfToken();
+      const shownUserId = sessionUserSource?.() ?? null;
+      const fresh = await refreshSession();
+      // The cookie can belong to someone else now (another sign-in in another tab). Retrying would
+      // run this write as that person while the screen still shows the first one, so stop instead.
+      if (shownUserId !== null && fresh.user.id !== shownUserId) {
+        setCsrfToken(null);
+        sessionChangedHandler?.();
+        throw new ApiError({
+          status: 403,
+          code: "SESSION_CHANGED",
+          message: "Someone else signed in on this computer in another tab. Reloading to show their account; nothing was saved.",
+          requestId,
+        });
+      }
       return execute(path, options, true);
     }
     throw error;
@@ -233,11 +267,14 @@ export async function fetchSession(signal?: AbortSignal): Promise<Session> {
   return session;
 }
 
+/** One shared GET /auth/me at a time (several writes may need a token at once). */
+function refreshSession(): Promise<Session> {
+  sessionRefresh ??= fetchSession().finally(() => {
+    sessionRefresh = null;
+  });
+  return sessionRefresh;
+}
+
 export function refreshCsrfToken(): Promise<string> {
-  csrfRefresh ??= fetchSession()
-    .then((session) => session.csrf_token)
-    .finally(() => {
-      csrfRefresh = null;
-    });
-  return csrfRefresh;
+  return refreshSession().then((session) => session.csrf_token);
 }

@@ -14,7 +14,7 @@ from telegram import (
     ReplyKeyboardRemove,
     Update,
 )
-from telegram.constants import ChatType
+from telegram.constants import ChatAction, ChatType
 from telegram.error import BadRequest, TelegramError
 from telegram.ext import (
     Application,
@@ -172,6 +172,31 @@ def schedule_jobs(
     job_queue.run_repeating(run_outbox, interval=JOB_INTERVALS["outbox"], first=20, name="outbox")
 
 
+TYPING_REFRESH_S = 4.0  # Telegram shows "typing" for 5 s or less per call (Bot.send_chat_action)
+
+
+@asynccontextmanager
+async def keep_typing(
+    send: Callable[[], Coroutine[Any, Any, object]], interval: float = TYPING_REFRESH_S
+) -> AsyncIterator[None]:
+    """Shows "typing..." while a reply is prepared; a failed status update never delays or blocks it."""
+
+    async def renew() -> None:
+        while True:
+            try:
+                await send()
+            except TelegramError as exc:
+                log.info("typing_status_failed", error=type(exc).__name__)
+            await asyncio.sleep(interval)
+
+    task = asyncio.create_task(renew())
+    try:
+        yield
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 class TelegramAdapter:
     def __init__(self, conversation: ConversationService) -> None:
         self._conversation = conversation
@@ -181,7 +206,10 @@ class TelegramAdapter:
         message, user = update.effective_message, update.effective_user
         if message is None or user is None or message.text is None:
             return
-        async with self._locks.hold(user.id):
+        async with (
+            self._locks.hold(user.id),
+            keep_typing(lambda: message.reply_chat_action(ChatAction.TYPING)),
+        ):
             replies = await self._conversation.handle_text(IncomingUser(user.id), message.text)
         for reply in replies:
             await _send(message.reply_text, reply)

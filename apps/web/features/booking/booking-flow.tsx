@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, InlineError } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,12 +17,19 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createAppointment, findPatientsByPhone, getAvailability, getDoctors, type NewAppointmentPatient } from "@/lib/api/endpoints";
-import { isApiError, toApiError } from "@/lib/api/errors";
+import { isApiError, isOutcomeUnknown, toApiError } from "@/lib/api/errors";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { Appointment, PatientRef, Slot } from "@/lib/api/schemas";
 import { formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { newPatientSchema, phoneLookupSchema, type NewPatientForm, type PhoneLookupForm } from "@/lib/validation/forms";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
+
+const NEW_PATIENT_API_FIELDS = {
+  "patient.full_name": "full_name",
+  "patient.phone": "phone",
+  "patient.verbal_consent": "verbal_consent",
+} as const;
 
 const SLOT_GONE_CODES = new Set(["SLOT_TAKEN", "SLOT_UNAVAILABLE"]);
 
@@ -66,18 +73,24 @@ function SlotPicker({
       </div>
     );
   }
-  if (query.isError) return <ErrorState what="free times" error={query.error} onRetry={() => query.refetch()} />;
+  if (query.isLoadingError) return <ErrorState what="free times" error={query.error} onRetry={() => query.refetch()} />;
+  const notice = <RefetchNotice query={query} what="free times" />;
   if (query.data.slots.length === 0) {
     return (
-      <EmptyState
-        icon={CalendarX}
-        title="No free times on this day"
-        description="The doctor may be fully booked, on leave or not working. Try another date."
-      />
+      <>
+        {notice}
+        <EmptyState
+          icon={CalendarX}
+          title="No free times on this day"
+          description="The doctor may be fully booked, on leave or not working. Try another date."
+        />
+      </>
     );
   }
 
   return (
+    <>
+    {notice}
     <fieldset>
       <legend className="sr-only">Free times on {formatLongDate(query.data.date)}</legend>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
@@ -105,6 +118,7 @@ function SlotPicker({
         })}
       </div>
     </fieldset>
+    </>
   );
 }
 
@@ -128,7 +142,7 @@ function PatientPicker({
     staleTime: 0,
   });
 
-  const matches = phone !== null && lookup.isSuccess ? lookup.data.items : null;
+  const matches = phone !== null && lookup.data ? lookup.data.items : null;
   useEffect(() => {
     onRegisteringChange(matches !== null && matches.length === 0);
     // One exact phone match is the usual case: select it so the receptionist only has to confirm.
@@ -167,11 +181,14 @@ function PatientPicker({
         </Button>
       </form>
 
-      {phone !== null && lookup.isError ? (
+      {phone !== null && lookup.isLoadingError ? (
         <ErrorState what="patients" error={lookup.error} onRetry={() => lookup.refetch()} />
       ) : null}
+      {phone !== null ? (
+        <RefetchNotice query={lookup} what="the patient search" />
+      ) : null}
 
-      {phone !== null && lookup.isSuccess && lookup.data.items.length > 0 ? (
+      {phone !== null && lookup.data && lookup.data.items.length > 0 ? (
         <fieldset className="space-y-2">
           <legend className="mb-2 text-body-sm font-semibold">Patient with this number</legend>
           {lookup.data.items.map((patient) => {
@@ -201,7 +218,7 @@ function PatientPicker({
         </fieldset>
       ) : null}
 
-      {phone !== null && lookup.isSuccess && lookup.data.items.length === 0 ? (
+      {phone !== null && lookup.data && lookup.data.items.length === 0 ? (
         <div className="space-y-4 rounded-lg border border-dashed p-4">
           <p className="flex items-center gap-2 font-semibold">
             <UserPlus aria-hidden className="size-5 text-primary" />
@@ -287,6 +304,7 @@ export function BookingFlow() {
   const [slotNotice, setSlotNotice] = useState<string | null>(null);
   const [registering, setRegistering] = useState(false);
   const [flowKey, setFlowKey] = useState(0);
+  const [attempt, setAttempt] = useState<{ date: string; timeLabel: string } | null>(null);
 
   const newPatient = useForm<NewPatientForm>({
     resolver: zodResolver(newPatientSchema),
@@ -319,7 +337,19 @@ export function BookingFlow() {
         setSlot(null);
         await queryClient.invalidateQueries({ queryKey: queryKeys.availability(doctorId, date) });
         document.getElementById("step-time")?.focus();
+        return;
       }
+      if (isOutcomeUnknown(error)) {
+        // No answer arrived, so the booking may exist. Do not offer the same time again until
+        // the receptionist has checked; reload what the server now says.
+        setSlot(null);
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.scheduleAll }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.availability(doctorId, date) }),
+        ]);
+        return;
+      }
+      applyApiFieldErrors(error, newPatient.setError, NEW_PATIENT_API_FIELDS);
     },
   });
 
@@ -339,6 +369,7 @@ export function BookingFlow() {
   const submit = () => {
     if (!slot) return;
     setSlotNotice(null);
+    setAttempt({ date, timeLabel: slot.time_label });
     if (existing) {
       book.mutate({ id: existing.id });
       return;
@@ -365,9 +396,10 @@ export function BookingFlow() {
       <PageHeader title="Book an appointment" description="For patients at the desk or on the phone." />
       <div className="space-y-6">
         <Step id="step-doctor" title="Doctor and day">
-          {doctors.isError ? (
+          <RefetchNotice query={doctors} what="the doctor list" />
+          {doctors.isLoadingError ? (
             <ErrorState what="doctors" error={doctors.error} onRetry={() => doctors.refetch()} />
-          ) : doctors.isSuccess && doctors.data.items.length === 0 ? (
+          ) : doctors.data && doctors.data.items.length === 0 ? (
             <EmptyState title="No active doctors" description="A clinic admin needs to add or reactivate a doctor first." />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">
@@ -441,7 +473,24 @@ export function BookingFlow() {
               {existing ? ` for ${existing.full_name}` : ""}
             </p>
           ) : null}
-          <InlineError error={bookError} title="The appointment was not booked" />
+          <InlineError
+            error={bookError}
+            fieldsMarked={matchApiFields(bookError, NEW_PATIENT_API_FIELDS).length > 0}
+            title="The appointment was not booked"
+            unknownOutcome={{
+              title: "We couldn't confirm whether the appointment was booked",
+              hint: attempt ? (
+                <p>
+                  <Link className="font-semibold underline underline-offset-4" href={`/?date=${attempt.date}`}>
+                    Check the schedule for {formatLongDate(attempt.date)}
+                  </Link>{" "}
+                  for this patient at {attempt.timeLabel} before booking again.
+                </p>
+              ) : (
+                "Check the schedule before booking again."
+              ),
+            }}
+          />
           <div className="flex flex-wrap items-center gap-3">
             <Button size="lg" disabled={missing.length > 0 || book.isPending} onClick={submit}>
               {book.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <CalendarCheck aria-hidden />}

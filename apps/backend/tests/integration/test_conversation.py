@@ -7,7 +7,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.agent.loop import AgentLoop, AuditEntry
+from clinic.agent.loop import AgentLoop, AuditEntry, AuditWriter
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.tools import build_registry
 from clinic.conversation.service import ConversationService
@@ -16,7 +16,7 @@ from clinic.domain.messages import IncomingUser, Reply
 from clinic.services.clinic_settings import ClinicSettingsService
 from clinic.services.patients import PatientService
 
-from ..unit.agent_doubles import UNAVAILABLE, ScriptedLLM, SlowLLM, text_turn
+from ..unit.agent_doubles import UNAVAILABLE, ScriptedLLM, SlowLLM, call_turn, text_turn
 from .factories import agent_services, make_clinic_settings, make_doctor, make_patient
 
 Factory = async_sessionmaker[AsyncSession]
@@ -29,11 +29,13 @@ async def _no_audit(entry: AuditEntry) -> None:
     return None
 
 
-async def build(session_factory: Factory, llm: Any, *, budget: float = 8.0) -> ConversationService:
+async def build(
+    session_factory: Factory, llm: Any, *, budget: float = 8.0, audit: AuditWriter = _no_audit
+) -> ConversationService:
     async with session_factory() as session:
         await make_clinic_settings(session)
         await session.commit()
-    agent = AgentLoop(llm, build_registry(), _no_audit, actor_id="test", budget_seconds=budget)
+    agent = AgentLoop(llm, build_registry(), audit, actor_id="test", budget_seconds=budget)
     return ConversationService(
         patients=PatientService(session_factory),
         settings=ClinicSettingsService(session_factory),
@@ -208,3 +210,30 @@ async def test_unknown_or_stale_button_is_answered_safely(session_factory: Facto
     for data in ("v1:confirm:deadbeef", "garbage", "v1:consent:maybe"):
         [reply] = await service.handle_callback(USER, data)
         assert "expired" in reply.text
+
+
+async def test_each_message_gets_its_own_request_id_shared_by_its_tool_calls(
+    session_factory: Factory,
+) -> None:
+    """NFR-11: one request id per incoming message, carried by every audit entry of that message."""
+    async with session_factory() as session:
+        await make_patient(session, telegram_user_id=USER.telegram_user_id, name="Asha Rao")
+        await session.commit()
+    entries: list[AuditEntry] = []
+
+    async def record(entry: AuditEntry) -> None:
+        entries.append(entry)
+
+    llm = ScriptedLLM(
+        call_turn(("list_doctors", {}), ("get_clinic_info", {"topic": "timings"})),
+        text_turn("Here you go."),
+        call_turn(("list_doctors", {})),
+        text_turn("Again."),
+    )
+    service = await build(session_factory, llm, audit=record)
+    await service.handle_text(USER, "doctors and timings?")
+    await service.handle_text(USER, "doctors again?")
+    first, second, third = (entry.request_id for entry in entries)
+    assert first == second, "tool calls of one message share its id"
+    assert third != first, "the next message gets a new id"
+    assert all(len(rid) == 32 for rid in (first, third))

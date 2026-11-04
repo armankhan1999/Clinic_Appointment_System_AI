@@ -103,6 +103,7 @@ async def test_no_appointments_returns_none(session_factory: Factory) -> None:
     llm = ScriptedLLM(call_turn(("list_my_appointments", {})), text_turn("You have none. Shall I book one?"))
     await build(session_factory, llm).handle_text(USER, "my appointments?")
     assert _tool_results(llm)[0].code == ResultCode.NONE
+    assert "offer to book" in _tool_results(llm)[0].data["next_step"], "E3-S1-AC2: says so and offers to book"
 
 
 async def test_cancel_shows_confirm_cancel_and_keep_it_then_cancels(session_factory: Factory) -> None:
@@ -120,6 +121,37 @@ async def test_cancel_shows_confirm_cancel_and_keep_it_then_cancels(session_fact
     [done] = await service.handle_callback(USER, buttons["Confirm cancel"])
     assert "cancelled" in done.text.lower()
     assert await _status(session_factory, appointment) == "cancelled"
+
+
+async def test_tapping_confirm_cancel_twice_says_already_cancelled(session_factory: Factory) -> None:
+    """E3-S3-AC3: the second tap reports the state; nothing changes."""
+    doctor, me, _ = await _setup(session_factory)
+    appointment = await _book(session_factory, doctor, me, at(8, 9))
+    llm = ScriptedLLM(
+        call_turn(("cancel_appointment", {"appointment_ref": appointment.ref})), text_turn("Tap below.")
+    )
+    service = build(session_factory, llm)
+    confirm = _buttons(await service.handle_text(USER, "cancel it"))["Confirm cancel"]
+    await service.handle_callback(USER, confirm)
+    [again] = await service.handle_callback(USER, confirm)
+    assert again.text == f"{appointment.ref} is already cancelled; nothing has changed."
+    assert await _status(session_factory, appointment) == "cancelled"
+
+
+async def test_confirm_cancel_after_keep_it_is_expired_not_already_cancelled(
+    session_factory: Factory,
+) -> None:
+    doctor, me, _ = await _setup(session_factory)
+    appointment = await _book(session_factory, doctor, me, at(8, 9))
+    llm = ScriptedLLM(
+        call_turn(("cancel_appointment", {"appointment_ref": appointment.ref})), text_turn("Tap below.")
+    )
+    service = build(session_factory, llm)
+    buttons = _buttons(await service.handle_text(USER, "cancel it"))
+    await service.handle_callback(USER, buttons["Keep it"])
+    [late] = await service.handle_callback(USER, buttons["Confirm cancel"])
+    assert "expired" in late.text.lower()
+    assert await _status(session_factory, appointment) == "booked"
 
 
 async def test_keep_it_leaves_the_appointment(session_factory: Factory) -> None:

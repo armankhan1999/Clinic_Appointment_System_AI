@@ -51,3 +51,18 @@ def test_callback_data_fits_telegram_limits() -> None:
     action = PendingStore(WallClock()).put(1, "book", {})
     assert len(f"v1:confirm:{action.token}".encode()) <= MAX_CALLBACK_BYTES
     assert action.token.isascii()
+
+
+def test_a_completed_action_is_remembered_for_a_repeated_tap() -> None:
+    """E3-S3-AC3: a second tap on a used button can be answered from what it already did."""
+    clock = WallClock()
+    store = PendingStore(clock, ttl=timedelta(minutes=10))
+    action = store.put(1, "cancel", {"reference": "APT-000001"})
+    assert store.pop(1, action.token) == action
+    assert store.completed(1, action.token) is None, "popping alone does not count as done"
+    store.remember_completed(1, action)
+    assert store.completed(1, action.token) == action
+    assert store.completed(2, action.token) is None, "bound to the user"
+    assert store.completed(1, "another-token") is None
+    clock.now += timedelta(minutes=11)
+    assert store.completed(1, action.token) is None, "forgotten when the button would have expired"

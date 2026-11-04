@@ -1,10 +1,13 @@
 """Telegram adapter: Reply → Bot API markup, and which chats the bot serves."""
 
+import asyncio
+
 import pytest
 from telegram import InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.constants import ChatType
+from telegram.error import NetworkError
 
-from clinic.bot.telegram_app import serves_chat, to_markup
+from clinic.bot.telegram_app import keep_typing, serves_chat, to_markup
 from clinic.domain.messages import Button, Reply
 
 
@@ -107,3 +110,31 @@ def test_reminder_and_outbox_jobs_are_scheduled() -> None:
     from clinic.bot.telegram_app import JOB_INTERVALS
 
     assert JOB_INTERVALS == {"reminders": 300, "outbox": 60}, "E4-S1-AC1: reminders every 5 minutes"
+
+
+async def test_typing_status_is_refreshed_until_the_reply_is_ready() -> None:
+    """Telegram shows 'typing' for at most 5 s, so a slow reply needs the status renewed."""
+    sent: list[float] = []
+
+    async def send() -> None:
+        sent.append(asyncio.get_running_loop().time())
+
+    async with keep_typing(send, interval=0.05):
+        await asyncio.sleep(0.18)
+    count = len(sent)
+    await asyncio.sleep(0.12)
+    assert count >= 3, "renewed while the reply was being prepared"
+    assert len(sent) == count, "stops once the reply is ready"
+
+
+async def test_a_failing_typing_status_never_blocks_the_reply() -> None:
+    attempts = 0
+
+    async def send() -> None:
+        nonlocal attempts
+        attempts += 1
+        raise NetworkError("telegram unreachable")
+
+    async with keep_typing(send, interval=0.01):  # must not raise into the reply path
+        await asyncio.sleep(0.05)
+    assert attempts >= 2, "a failed status update is logged and retried, never propagated"

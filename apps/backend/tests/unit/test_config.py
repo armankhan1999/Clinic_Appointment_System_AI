@@ -22,6 +22,9 @@ def make_settings(**overrides: Any) -> Settings:
         "gemini_model": "gemini-3.5-flash-lite",
         "clinic_timezone": "Asia/Kolkata",
         "auth_secret": "test-auth-secret-of-at-least-32-characters",
+        # Pinned so OS variables (CI sets DB_SSL=disable for its Postgres container) cannot leak in.
+        "db_ssl": "auto",
+        "db_ssl_root_cert": None,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
@@ -68,6 +71,13 @@ def test_defaults() -> None:
     assert settings.db_schema == "clinic"
     assert settings.db_test_schema == "clinic_test"
     assert settings.llm_timeout_seconds == 8.0
+    assert settings.agent_turn_budget_seconds == 25.0
+
+
+def test_a_turn_budget_shorter_than_one_model_call_is_rejected() -> None:
+    """Each model call is capped at LLM_TIMEOUT_SECONDS; the whole turn must allow at least one call."""
+    with pytest.raises(ValidationError, match="AGENT_TURN_BUDGET_SECONDS"):
+        make_settings(llm_timeout_seconds=8.0, agent_turn_budget_seconds=5.0)
 
 
 def test_owner_password_key_is_never_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,3 +147,16 @@ def test_auth_secret_is_required_long_and_hidden() -> None:
     assert settings.auth_secret.get_secret_value() not in repr(settings)
     with pytest.raises(ValidationError, match="auth_secret"):
         make_settings(auth_secret="too-short")
+
+
+def test_env_example_lists_every_setting() -> None:
+    """E7-S1-AC2: every setting is documented in .env.example (set, or commented out with its default)."""
+    import re
+    from pathlib import Path
+
+    from clinic.config import REPO_ROOT_ENV
+
+    example = Path(REPO_ROOT_ENV).with_name(".env.example").read_text(encoding="utf-8")
+    listed = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", example, flags=re.MULTILINE))
+    missing = sorted(name.upper() for name in Settings.model_fields if name.upper() not in listed)
+    assert missing == []

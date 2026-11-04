@@ -107,7 +107,7 @@ Confirm execution re-validates everything inside one transaction (MP-04: revalid
 
 | Failure | Behaviour | AC |
 |---|---|---|
-| LLM timeout or error | Fallback reply with clinic phone, sent within 10 s (LLM budget ≈ 8 s) | E1-S1-AC3, E7-S6-AC2 |
+| LLM timeout or error | Fallback reply with clinic phone, sent within 10 s: each model call is capped at `LLM_TIMEOUT_SECONDS` (8 s); a whole turn that keeps getting answers may use up to `AGENT_TURN_BUDGET_SECONDS` (25 s) while Telegram shows "typing…" (D-34) | E1-S1-AC3, E7-S6-AC2 |
 | Invalid tool arguments | Tool not run; validation error returned to the LLM; audited as `INVALID_ARGS` | E7-S3-AC3 |
 | More than 5 tool calls | Stop; safe reply; offer human | AGT-06 |
 | 3 consecutive failures of one tool | Code adds a **Talk to staff** button; tapping it runs `handoff_to_staff(agent_failed)` | E5-S4-AC1, GAP-32 |

@@ -3,21 +3,39 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Save, TriangleAlert, Undo2 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useForm, useWatch, type FieldError as RhfFieldError } from "react-hook-form";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
-import { ErrorState, InlineError, LoadingState } from "@/components/states";
+import { ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getSettings, updateSettings } from "@/lib/api/endpoints";
+import { applyApiFieldErrors, matchApiFields } from "@/lib/api/field-errors";
 import type { ClinicSettings } from "@/lib/api/schemas";
 import { formatRelative, formatUtcTimestamp, toHourMinute } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { parsePhrases, settingsFormSchema, type SettingsForm } from "@/lib/validation/forms";
+
+const SETTINGS_API_FIELDS = {
+  clinic_name: "clinic_name",
+  phone: "phone",
+  address: "address",
+  staff_hours_text: "staff_hours_text",
+  timezone: "timezone",
+  emergency_number: "emergency_number",
+  emergency_phrases: "emergencyPhrasesText",
+  cutoff_minutes: "cutoff_minutes",
+  booking_window_days: "booking_window_days",
+  max_upcoming_per_patient: "max_upcoming_per_patient",
+  max_per_doctor_per_day: "max_per_doctor_per_day",
+  morning_end: "morning_end",
+  afternoon_end: "afternoon_end",
+} as const;
 
 const NUMBER_FIELDS = ["cutoff_minutes", "booking_window_days", "max_upcoming_per_patient", "max_per_doctor_per_day"] as const;
 
@@ -84,8 +102,13 @@ function Row({ id, label, help, error, wide, children }: { id: string; label: st
 export function SettingsFormView() {
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: ({ signal }) => getSettings(signal), refetchOnWindowFocus: false });
   if (settings.isPending) return <LoadingState label="Loading clinic settings" rows={6} />;
-  if (settings.isError) return <ErrorState what="clinic settings" error={settings.error} onRetry={() => settings.refetch()} />;
-  return <SettingsEditor settings={settings.data} />;
+  if (settings.isLoadingError) return <ErrorState what="clinic settings" error={settings.error} onRetry={() => settings.refetch()} />;
+  return (
+    <div className="space-y-4">
+      <RefetchNotice query={settings} what="clinic settings" />
+      <SettingsEditor settings={settings.data} />
+    </div>
+  );
 }
 
 function SettingsEditor({ settings }: { settings: ClinicSettings }) {
@@ -103,7 +126,11 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
       form.reset(toForm(saved));
       notify({ tone: "success", title: "Clinic settings saved" });
     },
+    onError: (error) => applyApiFieldErrors(error, form.setError, SETTINGS_API_FIELDS),
   });
+
+  // A time-zone change moves every slot and appointment label, so it is confirmed separately.
+  const [timezoneChange, setTimezoneChange] = useState<Partial<ClinicSettings> | null>(null);
 
   const e = form.formState.errors;
   const { isDirty } = form.formState;
@@ -113,11 +140,40 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
       form.reset(original);
       return;
     }
+    if (changes.timezone !== undefined) {
+      setTimezoneChange(changes);
+      return;
+    }
     save.mutate(changes);
   });
 
   return (
     <form noValidate onSubmit={onSubmit} className="space-y-4">
+      <ConfirmDialog
+        open={timezoneChange !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTimezoneChange(null);
+            save.reset();
+          }
+        }}
+        title={`Change the clinic time zone to ${timezoneChange?.timezone ?? ""}?`}
+        description={
+          <>
+            <p>
+              Free slots will be worked out in the new time zone. Existing appointments are stored as a moment in time and keep
+              it, so the times shown for them will change.
+            </p>
+            <p>Only do this if the clinic&apos;s location really changed.</p>
+          </>
+        }
+        confirmLabel="Change time zone"
+        cancelLabel={`Keep ${original.timezone}`}
+        destructive
+        pending={save.isPending}
+        error={save.error}
+        onConfirm={() => (timezoneChange ? save.mutate(timezoneChange, { onSuccess: () => setTimezoneChange(null) }) : undefined)}
+      />
       <div className="rounded-xl border bg-card">
         <Group title="Clinic details" description="Shown to patients by the Telegram assistant.">
           <Row id="clinic_name" label="Clinic name" error={e.clinic_name}>
@@ -183,7 +239,11 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
       </div>
 
       <div className="sticky bottom-0 z-10 space-y-3 rounded-xl border bg-card p-4 shadow-[var(--shadow-overlay)]">
-        <InlineError error={save.error} title="The settings were not saved" />
+        <InlineError
+          error={save.error}
+          title="The settings were not saved"
+          fieldsMarked={matchApiFields(save.error, SETTINGS_API_FIELDS).length > 0}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={!isDirty || save.isPending}>
             {save.isPending ? <LoaderCircle aria-hidden className="animate-spin" /> : <Save aria-hidden />}

@@ -40,13 +40,23 @@ class Settings(BaseSettings):
     # Keys the hashes of attempted staff usernames (never stored in the database). 32+ random characters.
     auth_secret: SecretStr = Field(min_length=32)
     gemini_model: str
+    # One model call: past this the provider counts as unreachable and the patient gets the fallback
+    # reply within 10 s (E1-S1-AC3).
     llm_timeout_seconds: float = 8.0
+    # A whole turn (several model calls, tools and audit writes) while the provider keeps answering.
+    agent_turn_budget_seconds: float = 25.0
 
     clinic_timezone: str
     log_level: str = "INFO"
 
     # The staff API binds to 127.0.0.1 only; the dashboard reaches it through a same-origin rewrite.
     api_port: int = Field(default=8000, ge=1024, le=65535)
+
+    @model_validator(mode="after")
+    def _turn_fits_a_model_call(self) -> Settings:
+        if self.agent_turn_budget_seconds < self.llm_timeout_seconds:
+            raise ValueError("AGENT_TURN_BUDGET_SECONDS must be at least LLM_TIMEOUT_SECONDS")
+        return self
 
     @model_validator(mode="after")
     def _separate_test_schema(self) -> Settings:

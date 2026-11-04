@@ -9,6 +9,8 @@ import {
   getCsrfToken,
   noteUserInput,
   setCsrfToken,
+  setSessionChangedHandler,
+  setSessionUserSource,
   setUnauthenticatedHandler,
 } from "@/lib/api/client";
 import { cancelAppointment, login, logout } from "@/lib/api/endpoints";
@@ -223,5 +225,44 @@ describe("background refreshes", () => {
     const { calls } = stubFetch([jsonResponse(200, appointmentFixture())]);
     await cancelAppointment("apt-1", "Clinic closed");
     expect(calls[0].headers["x-background-refresh"]).toBeUndefined();
+  });
+});
+
+describe("CSRF retry never acts as a different user (M3)", () => {
+  const csrf403 = () =>
+    jsonResponse(403, errorEnvelope("FORBIDDEN", "CSRF token missing or invalid", { details: { reason: "csrf" } }));
+  const meAs = (id: string, token: string) =>
+    jsonResponse(200, { user: { id, username: id, display_name: id, role: "receptionist", active: true }, csrf_token: token });
+
+  it("retries the write when /auth/me still returns the user the app shows", async () => {
+    setCsrfToken("stale");
+    setSessionUserSource(() => "u-1");
+    const changed = vi.fn();
+    setSessionChangedHandler(changed);
+    const { calls } = stubFetch([csrf403(), meAs("u-1", "fresh"), jsonResponse(200, appointmentFixture())]);
+
+    await cancelAppointment("apt-1", "Clinic closed");
+
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      "POST /api/v1/appointments/apt-1/cancel",
+      "GET /api/v1/auth/me",
+      "POST /api/v1/appointments/apt-1/cancel",
+    ]);
+    expect(changed).not.toHaveBeenCalled();
+  });
+
+  it("does not retry when the session now belongs to someone else, and asks the app to reload", async () => {
+    setCsrfToken("stale");
+    setSessionUserSource(() => "u-1");
+    const changed = vi.fn();
+    setSessionChangedHandler(changed);
+    const { calls } = stubFetch([csrf403(), meAs("u-2", "theirs")]);
+
+    await expect(cancelAppointment("apt-1", "Clinic closed")).rejects.toMatchObject({ code: "SESSION_CHANGED" });
+
+    expect(calls).toHaveLength(2);
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(changed).toHaveBeenCalledTimes(1);
+    expect(getCsrfToken()).toBeNull();
   });
 });

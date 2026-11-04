@@ -122,6 +122,24 @@ async def test_reminder_buttons_after_the_start_are_refused(session_factory: Fac
         assert "can no longer be changed" in reply.text
 
 
+async def test_reminder_change_buttons_inside_the_cut_off_point_to_the_clinic(
+    session_factory: Factory,
+) -> None:
+    """E4-S3-AC2: Reschedule and Cancel keep the E3 cut-off; Confirm attendance still works."""
+    doctor, patient = await _setup(session_factory)
+    soon = await _book(session_factory, doctor, patient, datetime(2030, 1, 7, 9, 30, tzinfo=IST))
+    service = build(session_factory, ScriptedLLM())
+    for kind in ("rresc", "rcanc"):
+        [reply] = await service.handle_callback(USER, f"v1:{kind}:{soon.id}")
+        assert "too close to the appointment" in reply.text
+        assert "call the clinic on" in reply.text
+        assert not reply.inline_buttons, "no Confirm step is offered"
+    [confirmed] = await service.handle_callback(USER, f"v1:rconf:{soon.id}")
+    assert "see you" in confirmed.text.lower()
+    async with session_factory() as session:
+        assert (await session.get_one(Appointment, soon.id)).status == "booked"
+
+
 async def test_forged_reminder_button_for_someone_elses_appointment_does_nothing(
     session_factory: Factory,
 ) -> None:

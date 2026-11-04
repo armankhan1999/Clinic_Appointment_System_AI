@@ -69,22 +69,30 @@ class CountingLLM:
     def __init__(self, inner: LLM) -> None:
         self._inner = inner
         self.calls = 0
+        self.seconds = 0.0
         self.errors: list[str] = []
 
     async def generate(
         self, *, system: str, transcript: Sequence[TranscriptItem], tools: Sequence[ToolSpec[Any]]
     ) -> LlmTurn:
         self.calls += 1
+        started = perf.perf_counter()
         try:
             return await self._inner.generate(system=system, transcript=transcript, tools=tools)
         except LlmUnavailableError as exc:
             status = getattr(exc.__cause__, "code", None)
             self.errors.append(f"{exc}" + (f" (HTTP {status})" if status else ""))
             raise
+        finally:
+            self.seconds += perf.perf_counter() - started
 
 
 def build_conversation(
-    settings: Settings, session_factory: Factory, clock: Callable[[], datetime], llm: LLM
+    settings: Settings,
+    session_factory: Factory,
+    clock: Callable[[], datetime],
+    llm: LLM,
+    budget_seconds: float,
 ) -> tuple[ConversationService, list[AuditEntry]]:
     audit: list[AuditEntry] = []
     write = db_audit_writer(session_factory)
@@ -98,7 +106,7 @@ def build_conversation(
         build_registry(),
         record,
         actor_id=settings.gemini_model,
-        budget_seconds=settings.llm_timeout_seconds,
+        budget_seconds=budget_seconds,
     )
     clinic_settings = ClinicSettingsService(session_factory)
     services = AgentServices(
@@ -133,13 +141,15 @@ class ScriptedPatient:
     audit: list[AuditEntry]
     turns: list[Turn] = field(default_factory=list)
     last: list[Reply] = field(default_factory=list)
+    shown: list[Reply] = field(default_factory=list)  # every reply so far, oldest first
 
     async def _turn(self, said: str, send: Callable[[], Any]) -> None:
-        audit_mark, error_mark = len(self.audit), len(self.llm.errors)
+        audit_mark, error_mark, model_mark = len(self.audit), len(self.llm.errors), self.llm.seconds
         started = perf.perf_counter()
         replies: list[Reply] = await send()
         seconds = perf.perf_counter() - started
         self.last = replies
+        self.shown.extend(replies)
         self.turns.append(
             Turn(
                 said=said,
@@ -148,6 +158,7 @@ class ScriptedPatient:
                 tools=[e.action for e in self.audit[audit_mark:]],
                 seconds=round(seconds, 3),
                 errors=tuple(self.llm.errors[error_mark:]),
+                llm_seconds=round(self.llm.seconds - model_mark, 3),
             )
         )
 
@@ -157,8 +168,9 @@ class ScriptedPatient:
     async def tap(self, label: str, data: str) -> None:
         await self._turn(f"[tap] {label}", lambda: self.service.handle_callback(self.user, data))
 
-    def _button(self, label: str) -> str | None:
-        for reply in self.last:
+    def _button(self, label: str, replies: Sequence[Reply] | None = None) -> str | None:
+        """The most recent button with this label, as a patient would tap the summary above."""
+        for reply in reversed(self.shown if replies is None else replies):
             for row in reply.inline_buttons:
                 for button in row:
                     if button.text == label and button.callback_data:
@@ -172,6 +184,8 @@ class ScriptedPatient:
                 case Say(text):
                     await self.say(text)
                 case BookFirstOffered(template, optional):
+                    if self._button("Confirm", self.last) is not None:
+                        continue  # a summary is already on screen: the patient taps it (next step)
                     shown = " ".join(
                         [r.text for r in self.last]
                         + [b.text for r in self.last for row in r.inline_buttons for b in row]

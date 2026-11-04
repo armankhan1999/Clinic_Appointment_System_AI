@@ -12,6 +12,10 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: !!process.env.CI,
+  // The app waits up to 15 s per request (lib/api/client.ts). Raise this only where the database is
+  // far from the API (risk R-LAT-01), so assertions wait as long as the app itself would.
+  expect: { timeout: Number(process.env.E2E_EXPECT_TIMEOUT_MS ?? 5_000) },
+  timeout: Number(process.env.E2E_TEST_TIMEOUT_MS ?? 30_000),
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",

@@ -118,6 +118,10 @@ class GeminiLLM:
     def model(self) -> str:
         return self._model
 
+    async def aclose(self) -> None:
+        """Release the HTTP client's connections (process shutdown, test sessions)."""
+        await self._client.aio.aclose()
+
     async def generate(
         self, *, system: str, transcript: Sequence[TranscriptItem], tools: Sequence[ToolSpec[Any]]
     ) -> LlmTurn:

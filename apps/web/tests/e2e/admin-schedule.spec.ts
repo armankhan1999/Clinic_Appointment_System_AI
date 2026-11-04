@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./clean-browser";
 
 import { api, signIn } from "./support";
 

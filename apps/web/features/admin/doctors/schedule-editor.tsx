@@ -14,7 +14,7 @@ import {
   type UseFormTrigger,
 } from "react-hook-form";
 
-import { ErrorState, InlineError, LoadingState } from "@/components/states";
+import { ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +31,7 @@ import {
   weeklyScheduleFormSchema,
   type WeeklyScheduleForm,
 } from "@/lib/validation/schedule";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 function FieldMessage({ id, message }: { id: string; message?: string }) {
   if (!message) return null;
@@ -175,7 +175,8 @@ export function ScheduleEditor({ doctorId, doctorName }: { doctorId: string; doc
 
   const loaded = schedule.data;
   useEffect(() => {
-    if (loaded) form.reset(blocksToForm(loaded.blocks));
+    // A later refresh must never overwrite hours the admin is still editing.
+    if (loaded && !form.formState.isDirty) form.reset(blocksToForm(loaded.blocks));
   }, [loaded, form]);
 
   const { isDirty } = form.formState;
@@ -197,12 +198,13 @@ export function ScheduleEditor({ doctorId, doctorName }: { doctorId: string; doc
   });
 
   if (schedule.isPending) return <LoadingState label="Loading weekly hours" rows={7} />;
-  if (schedule.isError) return <ErrorState what="the weekly hours" error={schedule.error} onRetry={() => schedule.refetch()} />;
+  if (schedule.isLoadingError) return <ErrorState what="the weekly hours" error={schedule.error} onRetry={() => schedule.refetch()} />;
 
   const hasErrors = Object.keys(form.formState.errors).length > 0;
 
   return (
     <form noValidate onSubmit={form.handleSubmit((values) => save.mutate(values))} className="space-y-4">
+      <RefetchNotice query={schedule} what="the weekly hours" />
       <p className="text-muted-foreground">
         Add one block per working stretch; a gap between blocks is a break. Slots must be {MIN_SLOT_MINUTES}–{MAX_SLOT_MINUTES} minutes (usually 15).
       </p>

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingState, RefetchNotice } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getDaySchedule } from "@/lib/api/endpoints";
@@ -14,7 +14,7 @@ import type { DaySchedule } from "@/lib/api/schemas";
 import { addDays, formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
 import { LIVE_REFRESH_MS, queryKeys } from "@/lib/query";
 import { useIsAdmin } from "@/lib/session";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { AppointmentRow } from "./appointment-row";
 import { AttentionPanel } from "./attention-panel";
@@ -115,9 +115,11 @@ export function TodayView() {
 
         <p className="text-caption text-muted-foreground">New bookings, including ones made through Telegram, appear automatically every 30 seconds.</p>
 
+        <RefetchNotice query={schedule} what="the schedule" />
+
         {schedule.isPending ? (
           <LoadingState label="Loading the schedule" />
-        ) : schedule.isError ? (
+        ) : schedule.isLoadingError ? (
           <ErrorState what="the schedule" error={schedule.error} onRetry={() => schedule.refetch()} />
         ) : schedule.data.doctors.length === 0 ? (
           <EmptyState

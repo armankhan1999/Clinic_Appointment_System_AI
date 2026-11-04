@@ -26,7 +26,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Textarea } from "@/components/ui/textarea";
 import type { Appointment, PatientRef } from "@/lib/api/schemas";
 import { CANCEL_REASON_MAX, cancelSchema } from "@/lib/validation/forms";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { useDayActions } from "./use-day-actions";
 
@@ -188,6 +188,10 @@ export function AppointmentRow({ appointment, isAdmin }: { appointment: Appointm
         destructive
         pending={actions.cancel.isPending}
         error={actions.cancel.error}
+        unknownOutcome={{
+          title: "We couldn't confirm whether the appointment was cancelled",
+          hint: "Check its status in the schedule before trying again. The schedule is refreshing now.",
+        }}
         onConfirm={submitCancel}
       >
         <Field data-invalid={!!reasonError}>
@@ -221,6 +225,10 @@ export function AppointmentRow({ appointment, isAdmin }: { appointment: Appointm
         confirmLabel={dialog === "no_show" ? "Mark no-show" : "Mark completed"}
         pending={actions.attendance.isPending}
         error={actions.attendance.error}
+        unknownOutcome={{
+          title: "We couldn't confirm whether attendance was saved",
+          hint: "Check the appointment's status in the schedule before trying again. The schedule is refreshing now.",
+        }}
         onConfirm={() => (dialog === "completed" || dialog === "no_show" ? markAs(dialog) : undefined)}
       />
 
@@ -232,6 +240,10 @@ export function AppointmentRow({ appointment, isAdmin }: { appointment: Appointm
         confirmLabel="Clear flag"
         pending={actions.clear.isPending}
         error={actions.clear.error}
+        unknownOutcome={{
+          title: "We couldn't confirm whether the call flag was cleared",
+          hint: "Check the attention list before trying again. It is refreshing now.",
+        }}
         onConfirm={() => actions.clear.mutate(a.id, { onSuccess: close })}
       />
     </li>
