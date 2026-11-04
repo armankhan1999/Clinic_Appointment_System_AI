@@ -9,9 +9,10 @@ from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import TypeAdapter
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, Select, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import InstrumentedAttribute
 
 from clinic.db.models import (
     Appointment,
@@ -58,6 +59,19 @@ SETTINGS_FIELDS = (
 )
 
 _APPOINTMENTS = TypeAdapter(list[AppointmentOut])  # 409 details carry the same shape as the preview
+
+
+async def _page[M](
+    session: AsyncSession,
+    query: Select[M],
+    order: tuple[ColumnElement[Any] | InstrumentedAttribute[Any], ...],
+    page: int,
+    page_size: int,
+) -> tuple[list[M], int]:
+    """One page of `query` plus the total row count (docs/api/staff-api.md: lists are paginated)."""
+    total = await session.scalar(select(func.count()).select_from(query.subquery()))
+    rows = await session.scalars(query.order_by(*order).offset((page - 1) * page_size).limit(page_size))
+    return list(rows.all()), int(total or 0)
 
 
 @dataclass(frozen=True)
@@ -294,9 +308,9 @@ class AdminService:
 
     # ---- FAQ (IMP-02) ------------------------------------------------------------------------------
 
-    async def faq(self) -> list[ClinicInfo]:
+    async def faq(self, page: int, page_size: int) -> tuple[list[ClinicInfo], int]:
         async with self._session_factory() as session:
-            return list((await session.scalars(select(ClinicInfo).order_by(ClinicInfo.topic))).all())
+            return await _page(session, select(ClinicInfo), (ClinicInfo.topic,), page, page_size)
 
     async def save_faq(
         self, principal: StaffPrincipal, entry_id: UUID | None, changes: dict[str, Any]
@@ -374,23 +388,21 @@ class AdminService:
     async def audit(
         self, filters: dict[str, Any], page: int, page_size: int
     ) -> tuple[list[dict[str, Any]], int]:
+        """`from` and `to` are whole days in the clinic time zone, both inclusive."""
+        view = await self._settings.get()
         query = select(AuditLog)
         if filters.get("from"):
-            query = query.where(AuditLog.ts >= filters["from"])
+            query = query.where(AuditLog.ts >= datetime.combine(filters["from"], time.min, tzinfo=view.tz))
         if filters.get("to"):
-            query = query.where(AuditLog.ts < filters["to"])
+            day_after = filters["to"] + timedelta(days=1)
+            query = query.where(AuditLog.ts < datetime.combine(day_after, time.min, tzinfo=view.tz))
         for name in ("actor_type", "action", "patient_id"):
             if filters.get(name) is not None:
                 query = query.where(getattr(AuditLog, name) == filters[name])
         async with self._session_factory() as session:
-            total = await session.scalar(select(func.count()).select_from(query.subquery()))
-            rows = (
-                await session.scalars(
-                    query.order_by(AuditLog.ts.desc(), AuditLog.id.desc())
-                    .offset((page - 1) * page_size)
-                    .limit(page_size)
-                )
-            ).all()
+            rows, total = await _page(
+                session, query, (AuditLog.ts.desc(), AuditLog.id.desc()), page, page_size
+            )
         items = [
             {
                 "id": r.id,
@@ -406,7 +418,7 @@ class AdminService:
             }
             for r in rows
         ]
-        return items, int(total or 0)
+        return items, total
 
     # ---- weekly metrics (E6-S6, GAP-24) --------------------------------------------------------------
 
@@ -453,12 +465,13 @@ class AdminService:
 
     # ---- staff users (IMP-04) --------------------------------------------------------------------------
 
-    async def staff_users(self) -> list[StaffUserOut]:
+    async def staff_users(self, page: int, page_size: int) -> tuple[list[StaffUserOut], int]:
         async with self._session_factory() as session:
-            rows = (await session.scalars(select(StaffUser).order_by(StaffUser.username))).all()
-        return [
+            rows, total = await _page(session, select(StaffUser), (StaffUser.username,), page, page_size)
+        users = [
             StaffUserOut(u.id, u.username, u.display_name, u.role, u.active, u.locked_until) for u in rows
         ]
+        return users, total
 
     async def create_staff_user(
         self, principal: StaffPrincipal, username: str, display_name: str, role: Role, password: str

@@ -8,9 +8,11 @@ Source of truth for the dashboard (`apps/web`) and the FastAPI implementation (`
 - JSON in and out, UTF-8. Timestamps are ISO 8601 **UTC** (`2030-01-09T04:00:00Z`); dates are `YYYY-MM-DD` in the clinic time zone; every appointment also carries a display label in clinic time (`"time_label": "9:30 AM"`), so the UI never converts time zones itself.
 - IDs are UUID strings. Appointment references look like `APT-000123`.
 - Auth: an HttpOnly session cookie `clinic_session` (SameSite=Lax, Path=/, Secure when served over HTTPS). Every request except `POST /auth/login` and the health checks needs it.
-- CSRF: every `POST`, `PUT`, `PATCH`, `DELETE` must send header `X-CSRF-Token` with the value from `GET /auth/me` (or the login response). Missing or wrong → `403 FORBIDDEN`.
+- CSRF: every `POST`, `PUT`, `PATCH`, `DELETE` must send header `X-CSRF-Token` with the value from `GET /auth/me` (or the login response). Missing or wrong → `403 FORBIDDEN` with `details.reason = "csrf"` (a role refusal has no `reason`), so the UI refreshes the token and retries only in that case.
+- Idle timeout: a session ends after 60 minutes without activity (12 hours absolute). Automatic polling sends `X-Background-Refresh: 1` on its `GET`s; such requests are authenticated but do not count as activity.
 - Roles: `receptionist` (R) and `admin` (A). Admin can do everything a receptionist can. Wrong role → `403 FORBIDDEN`; the UI hides admin screens, but the API is the enforcement point (E6-S1-AC4).
-- Lists are paginated with `?page=1&page_size=50` (max 100) and return `{"items": [...], "page": 1, "page_size": 50, "total": 123}`.
+- Lists are paginated with `?page=1&page_size=50` (max 100) and return `{"items": [...], "page": 1, "page_size": 50, "total": 123}`: `/audit`, `/faq`, `/staff-users`. The short lookups `/doctors`, `/patients` and `/doctors/{id}/leaves` return `{ "items": [...] }` only.
+- Weekdays are numbered 0 = Monday to 6 = Sunday.
 - Every response has `X-Request-ID`.
 
 ### Error envelope
@@ -45,7 +47,7 @@ type Appointment = {
   patient: PatientRef;
   reminders: { "24h": ReminderStatus; "2h": ReminderStatus };
   patient_confirmed: boolean;                                                         // E4-S3-AC1
-  staff_attention: { reason: string; at: string } | null;                            // E4-S4-AC2
+  staff_attention: { reason: "notification_failed" | "reminder_failed"; at: string } | null; // E4-S4-AC2
   can_mark_attendance: boolean;                                                       // start has passed (E6-S5)
 };
 type Slot = { start: string; time_label: string };
@@ -89,10 +91,10 @@ type Slot = { start: string; time_label: string };
 | `POST /doctors/{id}/leaves/preview` | `{ date }` | `{ affected: Appointment[] }` | E6-S3-AC3 |
 | `POST /doctors/{id}/leaves` | `{ date, reason, confirm_affected: boolean }` | `201 { leave, cancelled: Appointment[] }`. If bookings are affected and `confirm_affected` is false → `409 CONFLICT` with `details.affected`. On confirm, affected bookings are cancelled and notices queued | E6-S3-AC3, E4-S4 |
 | `DELETE /doctors/{id}/leaves/{leave_id}` | — | `204` | E6-S3 |
-| `GET /faq` / `POST /faq` / `PATCH /faq/{id}` / `DELETE /faq/{id}` | `{ topic: slug, aliases: string[], answer: 1-2000 chars }` (`topic` matches `^[a-z0-9_]{1,40}$`) | entry `{ id, topic, aliases, answer, updated_at }`; list → `{ items }`. A topic another entry already uses → `409 CONFLICT` | IMP-02, E5-S1-AC3 |
+| `GET /faq` / `POST /faq` / `PATCH /faq/{id}` / `DELETE /faq/{id}` | `{ topic: slug, aliases: string[], answer: 1-2000 chars }` (`topic` matches `^[a-z0-9_]{1,40}$`) | entry `{ id, topic, aliases, answer, updated_at }`; list → paginated, ordered by topic. A topic another entry already uses → `409 CONFLICT` | IMP-02, E5-S1-AC3 |
 | `GET /settings` / `PATCH /settings` | any subset of `clinic_name, phone, address, staff_hours_text, timezone, emergency_number, emergency_phrases, cutoff_minutes, booking_window_days, max_upcoming_per_patient, max_per_doctor_per_day, morning_end, afternoon_end` (`HH:MM`) | the full settings object. `422` for an unknown IANA time zone or `morning_end >= afternoon_end` | IMP-05 |
-| `GET /audit?from=&to=&actor_type=&action=&patient_id=&page=` | — | paginated `{ id, ts, actor_type, actor_id, patient_id, action, args, result, latency_ms, request_id }` | E7-S2-AC3, IMP-03 |
+| `GET /audit?from=&to=&actor_type=&action=&patient_id=&page=&page_size=` | `from`/`to` are `YYYY-MM-DD` days in the clinic time zone, both inclusive | paginated `{ id, ts, actor_type, actor_id, patient_id, action, args, result, latency_ms, request_id }`, newest first | E7-S2-AC3, IMP-03 |
 | `GET /metrics/weekly?week_start=YYYY-MM-DD` | — | `{ week_start, bookings_by_source: { bot, staff }, cancellations, per_doctor: [{ doctor_id, name, completed, no_show, no_show_rate }] }` — zeros, never an error, when empty; `no_show_rate = no_show / (completed + no_show)`, 0 when the denominator is 0 | E6-S6, GAP-24 |
-| `GET /staff-users` / `POST /staff-users` / `PATCH /staff-users/{id}` / `POST /staff-users/{id}/unlock` | create `{ username, display_name, role, password }` (password ≥ 12 chars); patch `{ display_name?, role?, active?, password? }` | `StaffUser & { locked_until: string \| null }`; list → `{ items }`. A password reset signs the user out everywhere. Deactivating or demoting your own account → `409 CONFLICT` | IMP-04 |
+| `GET /staff-users` / `POST /staff-users` / `PATCH /staff-users/{id}` / `POST /staff-users/{id}/unlock` | create `{ username, display_name, role, password }` (password ≥ 12 chars); patch `{ display_name?, role?, active?, password? }` | `StaffUser & { locked_until: string \| null }`; list → paginated, ordered by username. A password reset signs the user out everywhere. Deactivating or demoting your own account → `409 CONFLICT` | IMP-04 |
 
 Every write writes an audit row with `actor_type = "staff"` and the staff user id (GAP-18).

@@ -7,7 +7,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from clinic.api.deps import Admin, Api
 from clinic.db.models import ClinicInfo
@@ -113,11 +113,15 @@ class Items[T]:
 
 
 @dataclass(frozen=True)
-class Page:
-    items: list[dict[str, Any]]
+class Page[T]:
+    items: list[T]
     page: int
     page_size: int
     total: int
+
+
+PageNumber = Annotated[int, Query(ge=1)]
+PageSize = Annotated[int, Query(ge=1, le=100)]
 
 
 @dataclass(frozen=True)
@@ -198,8 +202,11 @@ async def delete_leave(doctor_id: UUID, leave_id: UUID, principal: Admin, api: A
 
 
 @router.get("/faq")
-async def list_faq(principal: Admin, api: Api) -> Items[FaqOut]:
-    return Items([_faq(e) for e in await api.admin.faq()])
+async def list_faq(
+    principal: Admin, api: Api, page: PageNumber = 1, page_size: PageSize = 50
+) -> Page[FaqOut]:
+    entries, total = await api.admin.faq(page, page_size)
+    return Page([_faq(e) for e in entries], page, page_size, total)
 
 
 @router.post("/faq", status_code=201)
@@ -232,14 +239,14 @@ async def patch_settings(body: SettingsPatch, principal: Admin, api: Api) -> dic
 async def audit(
     principal: Admin,
     api: Api,
-    start: Annotated[AwareDatetime | None, Query(alias="from")] = None,
-    end: Annotated[AwareDatetime | None, Query(alias="to")] = None,
+    start: Annotated[dt.date | None, Query(alias="from")] = None,
+    end: Annotated[dt.date | None, Query(alias="to")] = None,
     actor_type: Annotated[Literal["agent", "staff", "system", "patient_button"] | None, Query()] = None,
     action: Annotated[str | None, Query(max_length=60)] = None,
     patient_id: Annotated[UUID | None, Query()] = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 50,
-) -> Page:
+    page: PageNumber = 1,
+    page_size: PageSize = 50,
+) -> Page[dict[str, Any]]:
     filters = {"from": start, "to": end, "actor_type": actor_type, "action": action, "patient_id": patient_id}
     items, total = await api.admin.audit(filters, page, page_size)
     return Page(items, page, page_size, total)
@@ -253,8 +260,11 @@ async def weekly_metrics(
 
 
 @router.get("/staff-users")
-async def list_staff_users(principal: Admin, api: Api) -> Items[StaffUserOut]:
-    return Items(await api.admin.staff_users())
+async def list_staff_users(
+    principal: Admin, api: Api, page: PageNumber = 1, page_size: PageSize = 50
+) -> Page[StaffUserOut]:
+    users, total = await api.admin.staff_users(page, page_size)
+    return Page(users, page, page_size, total)
 
 
 @router.post("/staff-users", status_code=201)

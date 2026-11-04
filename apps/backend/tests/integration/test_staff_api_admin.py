@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from clinic.config import Settings
-from clinic.db.models import Appointment, Doctor, Notification
+from clinic.db.models import Appointment, AuditLog, Doctor, Notification
 from clinic.services.doctors import DoctorService
 
 from .api_harness import add_staff, api_client, login
@@ -290,3 +290,39 @@ async def test_password_reset_ends_the_users_existing_sessions(
     assert (before.status_code, reset.status_code) == (200, 200)
     assert after.status_code == 401, "a reset password must sign out sessions opened with the old one"
     assert admin_still_in.status_code == 200
+
+
+async def test_faq_and_staff_lists_are_paginated(settings: Settings, session_factory: Factory) -> None:
+    await _clinic(session_factory)
+    async with api_client(settings, session_factory, lambda: NOW) as client:
+        csrf = await login(client, "admin")
+        for topic in ("parking", "wifi"):
+            await client.post(
+                "/api/v1/faq", json={"topic": topic, "aliases": [], "answer": "Ask us."}, headers=csrf
+            )
+        faq = (await client.get("/api/v1/faq", params={"page": 2, "page_size": 1})).json()
+        staff = (await client.get("/api/v1/staff-users", params={"page": 1, "page_size": 100})).json()
+        too_big = await client.get("/api/v1/faq", params={"page_size": 101})
+    assert (faq["page"], faq["page_size"], faq["total"]) == (2, 1, 2)
+    assert [e["topic"] for e in faq["items"]] == ["wifi"]
+    assert (staff["total"], sorted(u["username"] for u in staff["items"])) == (2, ["admin", "riya"])
+    assert too_big.status_code == 422
+
+
+async def test_audit_dates_are_whole_days_in_clinic_time(
+    settings: Settings, session_factory: Factory
+) -> None:
+    await _clinic(session_factory)
+    async with session_factory() as session:
+        for moment in (at(6, 23, 30), at(7, 0, 15), at(7, 23, 45), at(8, 0, 5)):
+            session.add(AuditLog(ts=moment, actor_type="system", action="test.marker", result="OK"))
+        await session.commit()
+    async with api_client(settings, session_factory, lambda: NOW) as client:
+        await login(client, "admin")
+        page = (
+            await client.get(
+                "/api/v1/audit", params={"action": "test.marker", "from": "2030-01-07", "to": "2030-01-07"}
+            )
+        ).json()
+    stamps = sorted(datetime.fromisoformat(item["ts"]).astimezone(IST) for item in page["items"])
+    assert stamps == [at(7, 0, 15), at(7, 23, 45)], "both bounds are inclusive days in the clinic time zone"

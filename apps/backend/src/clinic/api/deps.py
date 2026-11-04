@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from clinic.agent.rate_limit import RateLimiter
+from clinic.api.errors import ApiError
 from clinic.config import Settings
 from clinic.services.admin import AdminService
 from clinic.services.staff_auth import StaffAuthService, StaffPrincipal, csrf_matches
@@ -15,6 +16,7 @@ from clinic.services.staff_ops import StaffOpsService
 
 SESSION_COOKIE = "clinic_session"
 CSRF_HEADER = "X-CSRF-Token"
+BACKGROUND_HEADER = "X-Background-Refresh"  # set by the dashboard on automatic polls
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
@@ -50,11 +52,18 @@ async def current_staff(request: Request, api: Annotated[ApiServices, Depends(se
     token = request.cookies.get(SESSION_COOKIE)
     if not token:
         raise HTTPException(401, "Please sign in.")
-    principal = await api.auth.authenticate(token)
+    # Polling is not activity: otherwise a screen left open never reaches the idle limit.
+    background = request.method in SAFE_METHODS and request.headers.get(BACKGROUND_HEADER) == "1"
+    principal = await api.auth.authenticate(token, touch=not background)
     if principal is None:
         raise HTTPException(401, "Your session has ended. Please sign in again.")
     if request.method not in SAFE_METHODS and not csrf_matches(token, request.headers.get(CSRF_HEADER)):
-        raise HTTPException(403, "This request is missing a valid security token. Please reload the page.")
+        raise ApiError(
+            403,
+            "FORBIDDEN",
+            "This request is missing a valid security token. Please reload the page.",
+            {"reason": "csrf"},
+        )
     return principal
 
 

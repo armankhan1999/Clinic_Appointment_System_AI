@@ -256,7 +256,8 @@ class StaffAuthService:
         except SQLAlchemyError as exc:
             log.warning("login_failure_purge_failed", **safe_exception_fields(exc))
 
-    async def authenticate(self, token: str) -> StaffPrincipal | None:
+    async def authenticate(self, token: str, *, touch: bool = True) -> StaffPrincipal | None:
+        """`touch=False` checks the session without counting the request as activity."""
         now = self._clock()
         async with self._session_factory() as session, session.begin():
             row = (
@@ -276,7 +277,7 @@ class StaffAuthService:
                 or not user.active
             ):
                 return None
-            if now - staff_session.last_seen_at > SEEN_WRITE_INTERVAL:
+            if touch and now - staff_session.last_seen_at > SEEN_WRITE_INTERVAL:
                 staff_session.last_seen_at = now
             return _principal(user, staff_session.id)
 

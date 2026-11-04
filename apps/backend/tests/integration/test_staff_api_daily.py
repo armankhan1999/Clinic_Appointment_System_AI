@@ -1,6 +1,6 @@
 """Staff API daily work: E6-S1, E6-S2, E6-S4, E6-S5, E5-S4-AC2, E5-S3-AC3, E7-S2-AC3 (staff-api.md)."""
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -103,7 +103,33 @@ async def test_writes_need_the_csrf_token(settings: Settings, session_factory: F
         accepted = await client.post(f"/api/v1/appointments/{appointment_id}/clear-attention", headers=csrf)
     assert refused.status_code == 403
     assert refused.json()["error"]["code"] == "FORBIDDEN"
+    assert refused.json()["error"]["details"] == {"reason": "csrf"}, "the UI tells a stale token from a role"
     assert accepted.status_code == 200
+
+
+async def test_background_refreshes_do_not_keep_an_idle_session_alive(
+    settings: Settings, session_factory: Factory
+) -> None:
+    """A dashboard left open polls every 30 s; only real activity may extend the 60-minute idle limit."""
+    await _clinic(session_factory)
+    now = [NOW]
+    background = {"X-Background-Refresh": "1"}
+    async with api_client(settings, session_factory, lambda: now[0]) as client:
+        await login(client, "riya")
+        now[0] = NOW + timedelta(minutes=50)
+        polled = await client.get("/api/v1/attention", headers=background)
+        now[0] = NOW + timedelta(minutes=70)
+        after_polling_only = await client.get("/api/v1/attention", headers=background)
+    async with api_client(settings, session_factory, lambda: now[0]) as client:
+        now[0] = NOW
+        await login(client, "riya")
+        now[0] = NOW + timedelta(minutes=50)
+        await client.get("/api/v1/attention")
+        now[0] = NOW + timedelta(minutes=70)
+        after_activity = await client.get("/api/v1/attention")
+    assert polled.status_code == 200
+    assert after_polling_only.status_code == 401
+    assert after_activity.status_code == 200
 
 
 async def test_receptionists_cannot_open_admin_screens(settings: Settings, session_factory: Factory) -> None:
