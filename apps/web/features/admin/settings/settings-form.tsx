@@ -7,7 +7,7 @@ import { useMemo, type ReactNode } from "react";
 import { useForm, useWatch, type FieldError as RhfFieldError } from "react-hook-form";
 
 import { PageHeader } from "@/components/page-header";
-import { ErrorState, InlineError, LoadingState } from "@/components/states";
+import { ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
@@ -84,8 +84,13 @@ function Row({ id, label, help, error, wide, children }: { id: string; label: st
 export function SettingsFormView() {
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: ({ signal }) => getSettings(signal), refetchOnWindowFocus: false });
   if (settings.isPending) return <LoadingState label="Loading clinic settings" rows={6} />;
-  if (settings.isError) return <ErrorState what="clinic settings" error={settings.error} onRetry={() => settings.refetch()} />;
-  return <SettingsEditor settings={settings.data} />;
+  if (settings.isLoadingError) return <ErrorState what="clinic settings" error={settings.error} onRetry={() => settings.refetch()} />;
+  return (
+    <div className="space-y-4">
+      <RefetchNotice query={settings} what="clinic settings" />
+      <SettingsEditor settings={settings.data} />
+    </div>
+  );
 }
 
 function SettingsEditor({ settings }: { settings: ClinicSettings }) {

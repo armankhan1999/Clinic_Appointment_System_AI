@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
-import { ErrorState, LoadingState } from "@/components/states";
+import { ErrorState, LoadingState, RefetchNotice } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -86,9 +86,10 @@ export function WeeklyMetrics() {
         }
       />
 
+      <RefetchNotice query={metrics} what="the weekly numbers" />
       {metrics.isPending ? (
         <LoadingState label="Loading weekly numbers" rows={3} />
-      ) : metrics.isError ? (
+      ) : metrics.isLoadingError ? (
         <ErrorState what="the weekly numbers" error={metrics.error} onRetry={() => metrics.refetch()} />
       ) : (
         <div className="space-y-6">

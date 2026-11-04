@@ -9,7 +9,7 @@ import { useForm } from "react-hook-form";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { Pill } from "@/components/status";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
@@ -131,9 +131,10 @@ export function DoctorsList() {
         }
       />
 
+      <RefetchNotice query={doctors} what="doctors" />
       {doctors.isPending ? (
         <LoadingState label="Loading doctors" />
-      ) : doctors.isError ? (
+      ) : doctors.isLoadingError ? (
         <ErrorState what="doctors" error={doctors.error} onRetry={() => doctors.refetch()} />
       ) : doctors.data.items.length === 0 ? (
         <EmptyState

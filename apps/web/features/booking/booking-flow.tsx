@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, InlineError } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -66,18 +66,24 @@ function SlotPicker({
       </div>
     );
   }
-  if (query.isError) return <ErrorState what="free times" error={query.error} onRetry={() => query.refetch()} />;
+  if (query.isLoadingError) return <ErrorState what="free times" error={query.error} onRetry={() => query.refetch()} />;
+  const notice = <RefetchNotice query={query} what="free times" />;
   if (query.data.slots.length === 0) {
     return (
-      <EmptyState
-        icon={CalendarX}
-        title="No free times on this day"
-        description="The doctor may be fully booked, on leave or not working. Try another date."
-      />
+      <>
+        {notice}
+        <EmptyState
+          icon={CalendarX}
+          title="No free times on this day"
+          description="The doctor may be fully booked, on leave or not working. Try another date."
+        />
+      </>
     );
   }
 
   return (
+    <>
+    {notice}
     <fieldset>
       <legend className="sr-only">Free times on {formatLongDate(query.data.date)}</legend>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
@@ -105,6 +111,7 @@ function SlotPicker({
         })}
       </div>
     </fieldset>
+    </>
   );
 }
 
@@ -128,7 +135,7 @@ function PatientPicker({
     staleTime: 0,
   });
 
-  const matches = phone !== null && lookup.isSuccess ? lookup.data.items : null;
+  const matches = phone !== null && lookup.data ? lookup.data.items : null;
   useEffect(() => {
     onRegisteringChange(matches !== null && matches.length === 0);
     // One exact phone match is the usual case: select it so the receptionist only has to confirm.
@@ -167,11 +174,14 @@ function PatientPicker({
         </Button>
       </form>
 
-      {phone !== null && lookup.isError ? (
+      {phone !== null && lookup.isLoadingError ? (
         <ErrorState what="patients" error={lookup.error} onRetry={() => lookup.refetch()} />
       ) : null}
+      {phone !== null ? (
+        <RefetchNotice query={lookup} what="the patient search" />
+      ) : null}
 
-      {phone !== null && lookup.isSuccess && lookup.data.items.length > 0 ? (
+      {phone !== null && lookup.data && lookup.data.items.length > 0 ? (
         <fieldset className="space-y-2">
           <legend className="mb-2 text-body-sm font-semibold">Patient with this number</legend>
           {lookup.data.items.map((patient) => {
@@ -201,7 +211,7 @@ function PatientPicker({
         </fieldset>
       ) : null}
 
-      {phone !== null && lookup.isSuccess && lookup.data.items.length === 0 ? (
+      {phone !== null && lookup.data && lookup.data.items.length === 0 ? (
         <div className="space-y-4 rounded-lg border border-dashed p-4">
           <p className="flex items-center gap-2 font-semibold">
             <UserPlus aria-hidden className="size-5 text-primary" />
@@ -365,9 +375,10 @@ export function BookingFlow() {
       <PageHeader title="Book an appointment" description="For patients at the desk or on the phone." />
       <div className="space-y-6">
         <Step id="step-doctor" title="Doctor and day">
-          {doctors.isError ? (
+          <RefetchNotice query={doctors} what="the doctor list" />
+          {doctors.isLoadingError ? (
             <ErrorState what="doctors" error={doctors.error} onRetry={() => doctors.refetch()} />
-          ) : doctors.isSuccess && doctors.data.items.length === 0 ? (
+          ) : doctors.data && doctors.data.items.length === 0 ? (
             <EmptyState title="No active doctors" description="A clinic admin needs to add or reactivate a doctor first." />
           ) : (
             <div className="grid gap-4 sm:grid-cols-2">

@@ -98,6 +98,44 @@ export function ErrorState({ error, onRetry, what }: { error: unknown; onRetry?:
   );
 }
 
+/**
+ * Non-blocking notice for a failed background refresh while earlier data is still on screen.
+ * The content (and anything typed into it) stays; only a first load that failed gets ErrorState.
+ */
+export function StaleDataNotice({ error, onRetry, what }: { error: unknown; onRetry?: () => void; what: string }) {
+  const apiError = toApiError(error);
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-2 rounded-lg border border-l-4 border-l-status-attention-edge bg-status-attention-bg px-4 py-3 text-body-sm text-status-attention sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div className="space-y-0.5">
+        <p className="font-semibold">Couldn&apos;t refresh {what}. Showing what was loaded earlier.</p>
+        <p>{apiError.message}</p>
+        <RequestReference requestId={apiError.requestId} />
+      </div>
+      {onRetry ? (
+        <Button variant="outline" size="sm" className="shrink-0 bg-card" onClick={onRetry}>
+          <RefreshCw aria-hidden />
+          Try again
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/** For a query result: the blocking error only when nothing was ever loaded. */
+export function RefetchNotice({
+  query,
+  what,
+}: {
+  query: { isRefetchError: boolean; error: unknown; refetch: () => unknown };
+  what: string;
+}) {
+  if (!query.isRefetchError) return null;
+  return <StaleDataNotice what={what} error={query.error} onRetry={() => void query.refetch()} />;
+}
+
 export function ForbiddenState({ requestId, message }: { requestId?: string | null; message?: string }) {
   return (
     <div role="alert" className="flex flex-col items-start gap-3 rounded-lg border bg-card p-5">

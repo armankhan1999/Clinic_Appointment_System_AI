@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -201,9 +201,10 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
         <h3 id="leave-list" className="text-title font-bold">
           Upcoming leave
         </h3>
+        <RefetchNotice query={leaves} what="leave days" />
         {leaves.isPending ? (
           <LoadingState label="Loading leave days" rows={2} />
-        ) : leaves.isError ? (
+        ) : leaves.isLoadingError ? (
           <ErrorState what="leave days" error={leaves.error} onRetry={() => leaves.refetch()} />
         ) : upcoming.length === 0 ? (
           <EmptyState icon={CalendarOff} title="No upcoming leave" description={`${doctorName} is available on all working days.`} />

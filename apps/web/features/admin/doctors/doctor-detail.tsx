@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingState, RefetchNotice } from "@/components/states";
 import { Pill } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -33,7 +33,7 @@ export function DoctorDetail() {
   );
 
   if (doctors.isPending) return <LoadingState label="Loading doctor" />;
-  if (doctors.isError) return <ErrorState what="this doctor" error={doctors.error} onRetry={() => doctors.refetch()} />;
+  if (doctors.isLoadingError) return <ErrorState what="this doctor" error={doctors.error} onRetry={() => doctors.refetch()} />;
   if (!doctor) {
     return (
       <>
@@ -46,6 +46,7 @@ export function DoctorDetail() {
   return (
     <>
       {back}
+      <RefetchNotice query={doctors} what="this doctor" />
       <PageHeader
         title={doctor.name}
         description={

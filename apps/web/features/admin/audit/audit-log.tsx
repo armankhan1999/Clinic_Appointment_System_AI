@@ -8,7 +8,7 @@ import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingState, RefetchNotice } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -160,9 +160,10 @@ export function AuditLog() {
         </div>
       </form>
 
+      <RefetchNotice query={log} what="the activity log" />
       {log.isPending ? (
         <LoadingState label="Loading the activity log" />
-      ) : log.isError ? (
+      ) : log.isLoadingError ? (
         <ErrorState what="the activity log" error={log.error} onRetry={() => log.refetch()} />
       ) : log.data.items.length === 0 ? (
         <EmptyState

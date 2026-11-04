@@ -5,7 +5,7 @@ import { CircleCheck, HeartPulse, MessageCircleQuestion, PhoneCall, type LucideI
 import { useState, type ReactNode } from "react";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorState } from "@/components/states";
+import { ErrorState, RefetchNotice } from "@/components/states";
 import { attentionReasonText, ticketReasonText } from "@/components/status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -93,16 +93,21 @@ export function AttentionPanel() {
     );
   }
 
-  if (query.isError) {
+  if (query.isLoadingError) {
     // Never fail silently here: this panel is where emergency alerts appear.
     return <ErrorState what="emergency alerts and help requests" error={query.error} onRetry={() => query.refetch()} />;
   }
 
   const { alerts, tickets, flagged } = query.data;
   const total = alerts.length + tickets.length + flagged.length;
+  // A failed refresh keeps the last list visible and says so; new alerts may be missing from it.
+  const refreshProblem = <RefetchNotice query={query} what="emergency alerts and help requests" />;
 
   if (total === 0) {
-    return (
+    // "Nothing needs attention" would be false reassurance if the last refresh failed.
+    return query.isRefetchError ? (
+      refreshProblem
+    ) : (
       <p role="status" className="flex items-center gap-2 rounded-lg border bg-card px-4 py-3 text-muted-foreground">
         <CircleCheck aria-hidden className="size-5 text-status-booked" />
         Nothing needs attention right now. Emergency alerts and help requests will show up here.
@@ -118,6 +123,7 @@ export function AttentionPanel() {
       aria-labelledby="attention-heading"
       className="space-y-3 rounded-xl border border-status-attention-edge/50 bg-status-attention-bg/60 p-4"
     >
+      {refreshProblem}
       <h2 id="attention-heading" className="flex items-center gap-2 text-title font-bold">
         Needs attention
         <span className="rounded-full bg-card px-2 text-body-sm tabular">{total}</span>

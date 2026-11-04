@@ -8,7 +8,7 @@ import { useForm, useWatch } from "react-hook-form";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
-import { EmptyState, ErrorState, InlineError, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -142,9 +142,10 @@ export function FaqEditor() {
           </Button>
         }
       />
+      <RefetchNotice query={entries} what="clinic answers" />
       {entries.isPending ? (
         <LoadingState label="Loading clinic answers" />
-      ) : entries.isError ? (
+      ) : entries.isLoadingError ? (
         <ErrorState what="clinic answers" error={entries.error} onRetry={() => entries.refetch()} />
       ) : items.length === 0 ? (
         <EmptyState
