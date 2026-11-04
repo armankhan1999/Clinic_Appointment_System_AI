@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { isOutcomeUnknown, toApiError } from "@/lib/api/errors";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 export function RequestReference({ requestId }: { requestId: string | null | undefined }) {
   if (!requestId) return null;

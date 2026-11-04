@@ -77,7 +77,7 @@ Integration, live and evaluation runs share the `clinic_test` schema: run them o
 
 ## Dashboard
 
-The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 22+: the `cn` class-merging package requires it; Next.js alone needs 20.9+). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
+The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 22+: the test tooling's jsdom dependencies declare 22.22+ or 24.15+; Next.js alone needs 20.9+). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
 
 ```powershell
 Set-Location apps/web

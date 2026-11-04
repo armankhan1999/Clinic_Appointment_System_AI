@@ -42,5 +42,5 @@ risks still open. Threats and trust boundaries: [`threat-model.md`](threat-model
 | WEB-L1 | `GET /patients?phone=` puts a phone number in the URL. Our API logs paths without query strings and `next start` logs no requests, so it is not logged today, but a future reverse proxy would log it | Strip query strings in any proxy log format, or change the contract to a POST lookup |
 | WEB-L2 | The dashboard CSP keeps `'unsafe-inline'` for scripts (Next.js without per-request nonces) | Low today: no `dangerouslySetInnerHTML`, React escapes output. Hardening: nonce-based CSP |
 | RLS | RLS is enabled with a permissive policy for the app role; isolation between patients is enforced in application code (`ToolContext`), not by row policies | Accepted for a single-clinic MVP with one app role |
-| D-33 | `cn@0.5.2` is pre-1.0 and two days old | Arman to decide: keep, or switch to `clsx` + `tailwind-merge` |
+| D-33 | ~~`cn@0.5.2` was pre-1.0 and two days old~~ | Resolved: replaced by `clsx` 2.1.1 + `tailwind-merge` 3.7.0 |
 | HSTS | No HSTS: the demo runs over plain HTTP on a laptop (D-05) | Add HSTS and `Secure` cookies when deployed behind HTTPS (`ENV=production` already sets `Secure`) |

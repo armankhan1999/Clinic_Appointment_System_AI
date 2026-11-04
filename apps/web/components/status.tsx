@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import type { Appointment, AppointmentStatus, ReminderStatus } from "@/lib/api/schemas";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 /*
  * Status semantics (docs/design/design-system.md): every state has a text label

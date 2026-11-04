@@ -26,7 +26,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui
 import { Textarea } from "@/components/ui/textarea";
 import type { Appointment, PatientRef } from "@/lib/api/schemas";
 import { CANCEL_REASON_MAX, cancelSchema } from "@/lib/validation/forms";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { useDayActions } from "./use-day-actions";
 

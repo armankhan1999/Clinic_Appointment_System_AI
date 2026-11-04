@@ -31,7 +31,7 @@ import {
   weeklyScheduleFormSchema,
   type WeeklyScheduleForm,
 } from "@/lib/validation/schedule";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 function FieldMessage({ id, message }: { id: string; message?: string }) {
   if (!message) return null;

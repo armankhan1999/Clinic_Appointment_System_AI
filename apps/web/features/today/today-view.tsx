@@ -14,7 +14,7 @@ import type { DaySchedule } from "@/lib/api/schemas";
 import { addDays, formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
 import { LIVE_REFRESH_MS, queryKeys } from "@/lib/query";
 import { useIsAdmin } from "@/lib/session";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { AppointmentRow } from "./appointment-row";
 import { AttentionPanel } from "./attention-panel";

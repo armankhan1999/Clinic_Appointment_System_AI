@@ -4,7 +4,7 @@ import { CircleCheck, CircleAlert, X } from "lucide-react";
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 type Tone = "success" | "error";
 type Toast = { id: number; tone: Tone; title: string; description?: string; requestId?: string | null };

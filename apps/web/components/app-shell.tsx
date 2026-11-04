@@ -25,7 +25,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { logout } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/errors";
 import type { StaffUser } from "@/lib/api/schemas";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 type NavItem = { href: string; label: string; icon: LucideIcon };
 

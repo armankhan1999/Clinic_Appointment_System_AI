@@ -23,7 +23,7 @@ import type { Appointment, PatientRef, Slot } from "@/lib/api/schemas";
 import { formatLongDate, isIsoDate, todayIso } from "@/lib/dates";
 import { queryKeys } from "@/lib/query";
 import { newPatientSchema, phoneLookupSchema, type NewPatientForm, type PhoneLookupForm } from "@/lib/validation/forms";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 const NEW_PATIENT_API_FIELDS = {
   "patient.full_name": "full_name",

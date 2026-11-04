@@ -13,7 +13,7 @@ import { getAttention } from "@/lib/api/endpoints";
 import type { Appointment, EmergencyAlert, Ticket } from "@/lib/api/schemas";
 import { formatRelative, formatShortDate, formatUtcTimestamp } from "@/lib/dates";
 import { LIVE_REFRESH_MS, queryKeys } from "@/lib/query";
-import { cn } from "cn";
+import { cn } from "@/lib/utils";
 
 import { PatientContact } from "./appointment-row";
 import { useDayActions } from "./use-day-actions";
