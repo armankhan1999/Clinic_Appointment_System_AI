@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, EyeOff, LoaderCircle, LockOpen, Power, UserPlus, Users } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, Lock, LockOpen, Power, UserPlus, Users } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
@@ -149,6 +149,30 @@ function CreateStaffDialog({ open, onOpenChange }: { open: boolean; onOpenChange
 
 type PendingAction = { kind: "toggle" | "unlock"; user: StaffUser } | null;
 
+/** Whole minutes until a lockout ends, or null when the account is not locked (E6-S1-AC3). */
+export function lockMinutesLeft(user: StaffUser, now: Date = new Date()): number | null {
+  if (!user.locked_until) return null;
+  const until = new Date(user.locked_until).getTime();
+  if (Number.isNaN(until) || until <= now.getTime()) return null;
+  return Math.max(1, Math.ceil((until - now.getTime()) / 60_000));
+}
+
+function StatusCell({ user }: { user: StaffUser }) {
+  if (!user.active) return <Pill tone="cancelled">Deactivated</Pill>;
+  const minutes = lockMinutesLeft(user);
+  if (minutes === null) return <Pill tone="booked">Active</Pill>;
+  return (
+    <span className="flex flex-col gap-1">
+      <Pill tone="attention" icon={Lock}>
+        Locked
+      </Pill>
+      <span className="text-caption text-muted-foreground">
+        Too many wrong passwords; unlocks by itself in about {minutes} minute{minutes === 1 ? "" : "s"}
+      </span>
+    </span>
+  );
+}
+
 export function StaffAccounts() {
   const queryClient = useQueryClient();
   const notify = useToast();
@@ -215,11 +239,18 @@ export function StaffAccounts() {
                   </TableCell>
                   <TableCell className="tabular">{user.username}</TableCell>
                   <TableCell>{ROLE_LABEL[user.role]}</TableCell>
-                  <TableCell>{user.active ? <Pill tone="booked">Active</Pill> : <Pill tone="cancelled">Deactivated</Pill>}</TableCell>
+                  <TableCell>
+                    <StatusCell user={user} />
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap justify-end gap-2">
-                      {user.active ? (
-                        <Button variant="outline" size="sm" onClick={() => setPending({ kind: "unlock", user })}>
+                      {user.active && lockMinutesLeft(user) !== null ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Unlock ${user.display_name}`}
+                          onClick={() => setPending({ kind: "unlock", user })}
+                        >
                           <LockOpen aria-hidden />
                           Unlock
                         </Button>

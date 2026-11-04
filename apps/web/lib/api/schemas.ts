@@ -15,6 +15,8 @@ export const staffUserSchema = z.object({
   display_name: z.string(),
   role: roleSchema,
   active: z.boolean(),
+  /** Present on admin staff-user responses; null when not locked. Absent from /auth/me. */
+  locked_until: z.string().nullish(),
 });
 export type StaffUser = z.infer<typeof staffUserSchema>;
 
