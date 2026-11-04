@@ -118,6 +118,7 @@ async def test_tool_resolves_relative_dates_and_labels_slots(session_factory: Fa
     assert result.data["date"] == "Wednesday, 9 January 2030"
     assert result.data["slots"][0] == {"slot_start": "2030-01-09T09:00:00+05:30", "time": "9:00 AM"}
     assert len(result.data["slots"]) == 4
+    assert "more_free_slots" not in result.data, "all free times are listed"
 
 
 async def test_tool_returns_at_most_five_slots(session_factory: Factory) -> None:
@@ -126,6 +127,9 @@ async def test_tool_returns_at_most_five_slots(session_factory: Factory) -> None
         _ctx(session_factory, service), CheckAvailabilityArgs(doctor_id=doctor_id, date="today")
     )
     assert len(result.data["slots"]) == 5
+    assert result.data["more_free_slots"] >= 1, (
+        "the model must know the list is cut short, or it calls an unlisted free time unavailable"
+    )
 
 
 async def test_tool_reports_ambiguous_and_unrecognised_dates(session_factory: Factory) -> None:

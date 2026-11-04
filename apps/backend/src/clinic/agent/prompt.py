@@ -5,7 +5,7 @@ from datetime import date
 from clinic.domain.slots import format_date_long
 from clinic.services.clinic_settings import ClinicSettingsView
 
-PROMPT_VERSION = "2026-11-03.2"
+PROMPT_VERSION = "2026-11-04.1"  # bump on any model-facing change, tool descriptions included
 
 
 def build_system_prompt(view: ClinicSettingsView, today: date) -> str:

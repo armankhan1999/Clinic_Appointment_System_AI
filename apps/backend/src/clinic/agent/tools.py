@@ -188,6 +188,8 @@ def _availability_payload(result: DayAvailability, max_slots: int) -> dict[str, 
             {"slot_start": slot.start.isoformat(), "time": format_time_12h(slot.start)}
             for slot in result.slots[:max_slots]
         ]
+        if (hidden := len(result.slots) - max_slots) > 0:
+            data["more_free_slots"] = hidden
     if result.next_dates:
         data["next_dates_with_free_slots"] = [_day(day) for day in result.next_dates]
     if result.next_working_day is not None:
@@ -234,7 +236,9 @@ CHECK_AVAILABILITY = ToolSpec(
     name="check_availability",
     description=(
         "Find free appointment slots for one doctor on one day. Returns up to 5 slots with their slot_start "
-        "values, or the next dates that have free slots. Always use it before naming any time."
+        "values, or the next dates that have free slots. Always use it before naming any time. When "
+        "more_free_slots is present, other free times exist that are not listed: never call an unlisted time "
+        "unavailable; check it with book_appointment or ask for another part of the day."
     ),
     args_model=CheckAvailabilityArgs,
     executor=check_availability,
