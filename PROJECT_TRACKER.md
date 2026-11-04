@@ -39,7 +39,7 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 |---|---|---|---|
 | DEC-RT | Reply time: option A done (D-34, 8 s per call / 25 s per turn + typing status) removed all turn-budget failures; the remaining 14/35 are single free-tier model calls over 8 s (AEV-PROD-02). Next lever: faster or paid model tier (option C); co-location (B) for the 3.9 s of database time | Arman | 2026-11-04 |
 | BLK-05 | Download the Supabase CA certificate to `infrastructure/db/prod-ca-2021.crt`, set `DB_SSL_ROOT_CERT`, compare its SHA-256 with `80:70:25:AD:…:72:E6:CA:FA` | Arman | 2026-11-03 |
-| BLK-06 | Telegram tap-through by a person (registration, booking, reminders) | Arman | 2026-11-03 |
+| BLK-06 | Telegram tap-through: registration, reminders, buttons and notices done live 2026-11-05 (LIVE-TG-01); booking by chat waits for the Gemini quota | Claude / Arman | 2026-11-03 |
 | SEC-ROT | Rotate the database password, Gemini key and bot token that were shared in chat | Arman | 2026-11-03 |
 | D-33 | ~~`cn@0.5.2`~~ Resolved: replaced by `clsx` 2.1.1 + `tailwind-merge` 3.7.0 | — | 2026-11-04 |
 | PR-1 | Review and merge PR #1 (`feat/m6-quality-e2e` → `main`); CI green on the PR | Arman | 2026-11-04 |
@@ -69,3 +69,10 @@ Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (Q
 - Merged to main: live development mode + `restart.ps1` (D-39), clinic date from the API (D-40), phone lookup by POST (D-41), CSP decision (D-42). All branches merged; `main` is the only branch.
 - Verified: M6-FULL-04 419/0, WEB-UNIT 120/0, E2E 18/18 (production build and dev server), booking E2E 2/2 after D-41.
 - Blocked: final evaluation (HTTP 429, free tier 500/day on flash-lite; 20/day on 3.5-flash).
+
+## Session log — 2026-11-05 (live persona tests)
+
+- Live tests on the running stack: Patient in Telegram (LIVE-TG-01, 19 checks), Receptionist and Admin in the dashboard (LIVE-DASH-01, 26 checks). AI flows deferred: the Gemini quota resets ≈13:30 IST.
+- Defects found live and fixed test-first, merged to main with green CI: D-43 booking-limit reason, D-44 taken username 409, D-45 password-reset control, D-46 dialogs scroll on short screens, D-47 "No reminders: not on Telegram", leave checkbox wording.
+- Doc alignment pass merged (requirements, architecture, API, security, design, READMEs).
+- Mistake: the Playwright tool echoed one login snippet, exposing the e2e_desk test password in the session log; it is rotated after the E2E agent finishes. Later logins used a one-shot localhost credential server instead.
