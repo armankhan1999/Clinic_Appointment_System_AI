@@ -1,7 +1,7 @@
 import { cleanup } from "@testing-library/react";
 import { afterEach } from "vitest";
 
-import { setCsrfToken, setUnauthenticatedHandler } from "@/lib/api/client";
+import { setCsrfToken, setSessionChangedHandler, setSessionUserSource, setUnauthenticatedHandler } from "@/lib/api/client";
 
 // jsdom lacks these browser APIs that Radix primitives (Select, Dialog) call.
 if (typeof Element !== "undefined") {
@@ -21,4 +21,6 @@ afterEach(() => {
   cleanup();
   setCsrfToken(null);
   setUnauthenticatedHandler(null);
+  setSessionUserSource(null);
+  setSessionChangedHandler(null);
 });
