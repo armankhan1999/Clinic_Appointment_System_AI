@@ -23,10 +23,10 @@ class RateLimiter:
         self._window = window_s
         self._mute = mute_s
         self._clock = clock
-        self._recent: dict[int, deque[float]] = {}
-        self._muted_until: dict[int, float] = {}
+        self._recent: dict[int | str, deque[float]] = {}
+        self._muted_until: dict[int | str, float] = {}
 
-    def check(self, user_id: int) -> Verdict:
+    def check(self, user_id: int | str) -> Verdict:
         now = self._clock()
         self._prune_idle(now)
         if self._muted_until.get(user_id, 0.0) > now:

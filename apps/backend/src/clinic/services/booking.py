@@ -99,7 +99,7 @@ def _appointment_view(row: Appointment, doctor_name: str) -> AppointmentView:
     )
 
 
-def _constraint_name(exc: IntegrityError) -> str | None:
+def constraint_name(exc: IntegrityError) -> str | None:
     driver_error = exc.orig.__cause__ if exc.orig is not None else None
     name = getattr(driver_error, "constraint_name", None)
     return name if isinstance(name, str) else None
@@ -246,7 +246,7 @@ class BookingService:
                         appointment_id=appointment.id,
                     )
         except IntegrityError as exc:
-            if _constraint_name(exc) not in DOUBLE_BOOKING_CONSTRAINTS:
+            if constraint_name(exc) not in DOUBLE_BOOKING_CONSTRAINTS:
                 raise
         return await self._slot_taken(
             view, now, patient_id, doctor_id, slot_start, actor_type, actor_id, audit_args
@@ -434,7 +434,7 @@ class BookingService:
                         ResultCode.OK, appointment, reference=new.ref, old_reference=old.ref, slot=check.slot
                     )
         except IntegrityError as exc:
-            if _constraint_name(exc) not in DOUBLE_BOOKING_CONSTRAINTS:
+            if constraint_name(exc) not in DOUBLE_BOOKING_CONSTRAINTS:
                 raise
         if appointment is None:  # unreachable: the constraints fire only after the appointment was loaded
             raise RuntimeError("double-booking violation without a loaded appointment")

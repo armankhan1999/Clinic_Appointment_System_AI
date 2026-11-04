@@ -5,6 +5,7 @@ import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import datetime
 from http import HTTPStatus
 
 import structlog
@@ -12,17 +13,29 @@ from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from clinic.agent.rate_limit import RateLimiter
+from clinic.api import routes_admin, routes_auth, routes_staff
+from clinic.api.deps import ApiServices
+from clinic.api.errors import ApiError, api_error_handler, error_response, refused_handler
 from clinic.config import DbTarget, Settings, get_settings
-from clinic.db.session import make_engine
-from clinic.observability import bind_request_id, new_request_id, request_id_var, safe_exception_fields
+from clinic.db.session import make_engine, make_session_factory
+from clinic.observability import bind_request_id, new_request_id, safe_exception_fields
+from clinic.services.admin import AdminService
+from clinic.services.availability import AvailabilityService, utc_now
+from clinic.services.booking import BookingService
+from clinic.services.clinic_settings import ClinicSettingsService
+from clinic.services.staff_auth import StaffAuthService
+from clinic.services.staff_ops import OperationRefusedError, StaffOpsService
 
 log = structlog.get_logger(__name__)
 
 type Readiness = Callable[[], Awaitable[bool]]
 
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+LOGIN_ATTEMPTS_PER_MINUTE = 10
 READINESS_TIMEOUT_S = 5.0  # a cold TLS + SCRAM connection to the pooler took 2.7 s (2026-11-03)
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
@@ -42,11 +55,6 @@ STATUS_CODES = {
 }
 
 
-def error_response(status: int, code: str, message: str) -> JSONResponse:
-    body = {"error": {"code": code, "message": message, "request_id": request_id_var.get()}}
-    return JSONResponse(body, status_code=status)
-
-
 async def _http_error(_: Request, exc: Exception) -> Response:
     if not isinstance(exc, StarletteHTTPException):
         raise exc
@@ -59,26 +67,53 @@ async def _validation_error(_: Request, exc: Exception) -> Response:
         raise exc
     # Field locations only: echoing input values could leak personal data into responses and logs.
     fields = sorted({".".join(str(part) for part in err["loc"]) for err in exc.errors()})
-    return error_response(422, "VALIDATION_ERROR", f"Invalid request fields: {', '.join(fields)}")
+    return error_response(
+        422, "VALIDATION_ERROR", f"Please check these fields: {', '.join(fields)}", {"fields": fields}
+    )
 
 
-def _database_readiness(settings: Settings) -> tuple[Readiness, Callable[[], Awaitable[None]]]:
-    engine = make_engine(DbTarget.app(settings), settings)
-
+def _probe(session_factory: async_sessionmaker[AsyncSession]) -> Readiness:
     async def probe() -> bool:
-        async with engine.connect() as conn:
-            await conn.execute(text("select 1"))
+        async with session_factory() as session:
+            await session.execute(text("select 1"))
         return True
 
-    return probe, engine.dispose
+    return probe
 
 
-def create_app(settings: Settings | None = None, *, readiness: Readiness | None = None) -> FastAPI:
+def _services(
+    settings: Settings, session_factory: async_sessionmaker[AsyncSession], clock: Callable[[], datetime]
+) -> ApiServices:
+    clinic_settings = ClinicSettingsService(session_factory)
+    booking = BookingService(session_factory, clinic_settings, clock=clock)
+    availability = AvailabilityService(session_factory, clinic_settings, clock=clock)
+    auth = StaffAuthService(
+        session_factory, secret=settings.auth_secret.get_secret_value().encode(), clock=clock
+    )
+    return ApiServices(
+        settings=settings,
+        session_factory=session_factory,
+        auth=auth,
+        ops=StaffOpsService(session_factory, clinic_settings, booking, availability, clock=clock),
+        admin=AdminService(session_factory, clinic_settings, auth, clock=clock),
+        login_limiter=RateLimiter(max_messages=LOGIN_ATTEMPTS_PER_MINUTE),
+    )
+
+
+def create_app(
+    settings: Settings | None = None,
+    *,
+    readiness: Readiness | None = None,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+    clock: Callable[[], datetime] = utc_now,
+) -> FastAPI:
     settings = settings or get_settings()
     dispose: Callable[[], Awaitable[None]] | None = None
-    if readiness is None:
-        readiness, dispose = _database_readiness(settings)
-    probe = readiness
+    if session_factory is None:
+        engine = make_engine(DbTarget.app(settings), settings)
+        session_factory = make_session_factory(engine)
+        dispose = engine.dispose
+    probe = readiness or _probe(session_factory)
     development = settings.env == "development"
 
     @asynccontextmanager
@@ -95,8 +130,14 @@ def create_app(settings: Settings | None = None, *, readiness: Readiness | None 
         openapi_url="/api/v1/openapi.json" if development else None,
         lifespan=lifespan,
     )
+    app.state.services = _services(settings, session_factory, clock)
     app.add_exception_handler(StarletteHTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
+    app.add_exception_handler(ApiError, api_error_handler)
+    app.add_exception_handler(OperationRefusedError, refused_handler)
+    app.include_router(routes_auth.router, prefix="/api/v1")
+    app.include_router(routes_staff.router, prefix="/api/v1")
+    app.include_router(routes_admin.router, prefix="/api/v1")
 
     @app.middleware("http")
     async def request_context(

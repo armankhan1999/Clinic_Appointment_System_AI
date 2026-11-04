@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import httpx
 import pytest
@@ -83,8 +84,9 @@ async def test_security_headers_are_set() -> None:
 async def test_api_docs_only_in_development() -> None:
     async with client(create_app(make_settings(env="development"), readiness=ready)) as c:
         assert (await c.get("/api/v1/openapi.json")).status_code == 200
+    test_ca = Path(__file__).with_name("fixtures") / "test-ca.pem"  # production requires verify-full TLS
     async with client(
-        create_app(make_settings(env="production", db_ssl_root_cert=None), readiness=ready)
+        create_app(make_settings(env="production", db_ssl_root_cert=test_ca), readiness=ready)
     ) as c:
         assert (await c.get("/api/v1/openapi.json")).status_code == 404
         assert (await c.get("/api/v1/docs")).status_code == 404
