@@ -311,11 +311,11 @@ class StaffOpsService:
                 ResultCode.LIMIT_REACHED: "The patient has reached the booking limit.",
                 ResultCode.NOT_FOUND: "Doctor or patient not found.",
             }
-            details = (
-                {"alternatives": [s.start.isoformat() for s in outcome.alternatives]}
-                if outcome.alternatives
-                else {}
-            )
+            details: dict[str, Any] = {}
+            if outcome.alternatives:
+                details["alternatives"] = [s.start.isoformat() for s in outcome.alternatives]
+            if outcome.reason is not None:  # staff need to know which rule refused the booking
+                details["reason"] = outcome.reason
             raise OperationRefusedError(
                 outcome.code, messages.get(outcome.code, "The booking was refused."), details
             )
