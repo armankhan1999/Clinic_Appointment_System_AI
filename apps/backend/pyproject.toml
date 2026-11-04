@@ -52,7 +52,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "S", "SIM", "RUF", "ASY
 ignore = ["TRY003", "TRY400"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["clinic", "seed"]
+known-first-party = ["clinic", "create_admin", "seed"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106"]
