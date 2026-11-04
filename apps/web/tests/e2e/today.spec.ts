@@ -1,12 +1,12 @@
 import { expect, test } from "./clean-browser";
 
-import { signIn } from "./support";
+import { doctorDay, signInAs } from "./support";
 
 // REQUIRES THE RUNNING STACK (dashboard + FastAPI + seeded dev database). Not runnable against mocks.
 
 test.describe("Today (E6-S2)", () => {
   test.beforeEach(async ({ page }) => {
-    await signIn(page, "receptionist");
+    await signInAs(page, "receptionist");
   });
 
   test("shows the attention panel and every active doctor's day", async ({ page }) => {
@@ -18,9 +18,9 @@ test.describe("Today (E6-S2)", () => {
     const today = new Date().toLocaleDateString("en-CA");
     const schedule = await page.request.get(`/api/v1/schedule?date=${today}`);
     expect(schedule.status()).toBe(200);
-    const body = (await schedule.json()) as { doctors: { name: string }[] };
+    const body = (await schedule.json()) as { doctors: { name: string; specialty: string }[] };
     for (const doctor of body.doctors) {
-      await expect(page.getByRole("heading", { level: 2, name: new RegExp(doctor.name) })).toBeVisible();
+      await expect(doctorDay(page, doctor)).toBeVisible();
     }
   });
 

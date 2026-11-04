@@ -31,7 +31,13 @@ npm run test:e2e    # Playwright, REQUIRES the running stack (see below)
 2. Create one admin and one receptionist account in the dev database and set `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD`, `E2E_RECEPTIONIST_USERNAME`, `E2E_RECEPTIONIST_PASSWORD` (see `.env.example`).
 3. `npx playwright install chromium` once.
 
-`global-setup.ts` stops the run with an explanation if the accounts are not set or `/api/v1/auth/me` does not return the API's 401 envelope. The booking spec books and then cancels one appointment for a new synthetic patient; the schedule spec restores the doctor's original weekly hours.
+`global-setup.ts` stops the run with an explanation if the accounts are not set or `/api/v1/auth/me` does not return the API's 401 envelope.
+
+The specs cover every staff screen (sign-in and lockout, Today and the attention panel, attendance, booking, doctors, hours and leave, clinic answers, activity log, weekly numbers, staff accounts, settings). They write to the dev database and clean up after themselves:
+
+- What the staff API cannot create (handoff tickets, emergency alerts, call flags, appointments that already started) comes from `apps/backend/tests/e2e_support` fixtures, run through `uv run` from `apps/backend`. They write to the dev schema only, refuse `ENV=production`, mark every row (`Playwright …` names, `e2e_tmp_` usernames), and `cleanup.py` deletes only marked rows. The fixtures read the repository `.env`; from a git worktree without it, set `UV_ENV_FILE` to that file (uv splits this variable on spaces, so use a path without spaces, such as its 8.3 short form).
+- Settings, weekly hours and leave days are restored; seed data is never deleted. The time-zone test switches to an alias with the same rules, so times never move.
+- The API allows 10 sign-in attempts per minute from one address, shared with every browser on the PC. Specs reuse one session per role (`signInAs`) and `submitLogin` paces all sign-ins to 7 per minute; the lockout and staff-account specs use throwaway accounts, never the E2E accounts.
 
 ## Layout
 
