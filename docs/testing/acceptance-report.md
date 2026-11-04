@@ -30,6 +30,8 @@ Story and AC detail: [`../tracking/user-story-tracker.md`](../tracking/user-stor
 | SEC-SCAN-01 secrets in history and tracked files | 0 hits |
 | CI-01 first GitHub Actions run | **failed** (4 TLS unit tests saw the job's `DB_SSL`); fixed and reproduced locally, not yet re-run on GitHub |
 | M6-FULL-02 final backend regression | 414 passed, 0 failed (37 eval/live tests deselected by design) |
+| M6-FULL-03 after D-33/D-34 | 418 passed, 0 failed |
+| CI-02 GitHub Actions on PR #1 | green: backend 414 passed, web 116 passed, audits clean |
 
 ## Agent evaluation against PRD §3.9 (E7-S5-AC3)
 
@@ -73,6 +75,32 @@ turn at 8 s. Options, for the owner to decide:
 
 Repeat runs: each run used `EVAL_RUNS=1`; run-to-run variance is not yet measured (§3.9 asks for N runs).
 
+### Option A implemented (D-34) and re-measured
+
+Arman chose option A. Each model call stays capped at 8 s (E1-S1-AC3 unchanged); a whole turn may now use 25 s
+while the model keeps answering, and Telegram shows "typing…". Re-run at the new production settings
+([report](eval-2026-11-04-production-split-budget.md), run AEV-PROD-02, 2026-11-04 afternoon):
+
+| Category | AEV-PROD-01 (8 s per turn) | AEV-PROD-02 (8 s per call, 25 s per turn) |
+|---|---|---|
+| Booking happy paths | 0/8 | 2/8 |
+| Reschedule and cancel | 1/6 | 1/6 |
+| Edge cases | 6/6 | 6/6 |
+| Medical advice | 5/5 | 5/5 |
+| Emergencies | 3/3 | 3/3 |
+| Prompt injection | 4/4 | 4/4 |
+| Not in the FAQ | 1/3 | 0/3 |
+| Total | 20/35 | 21/35 |
+| Failures caused by the turn budget | 15 | **0** |
+| Failures caused by one model call taking more than 8 s | 0 | **14** |
+| Median model time per turn | 5.7 s | 8.0 s (max 18.9 s) |
+
+The change removed every turn-budget failure, as intended. In this run the free-tier model itself had slowed
+down (median 8.0 s per turn against 5.5–5.7 s in the morning runs), so single calls crossed the 8 s per-call
+cap, which exists to keep the "fallback within 10 s when the model is unreachable" guarantee. Raising that cap
+would break E1-S1-AC3; the remaining lever is model latency itself (option C: a faster or paid tier), and
+option B for the 3.9 s of database time. Turns in passing scenarios took a median 7.4 s (max 22 s).
+
 ## Non-functional requirements
 
 | NFR | Status | Evidence |
@@ -93,10 +121,9 @@ Repeat runs: each run used `EVAL_RUNS=1`; run-to-run variance is not yet measure
 
 | Item | Owner |
 |---|---|
-| Decide the reply-time option above (A, B and/or C) | Arman |
+| Reply time: option A is in place (D-34); the remaining failures need option C (model latency) and benefit from B | Arman |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
 | BLK-06: a person taps through registration, booking and reminders in Telegram | Arman |
 | Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |
-| D-33: keep `cn@0.5.2` or switch to `clsx` + `tailwind-merge` | Arman |
-| Push `feat/m6-quality-e2e` so CI re-runs with the fix (main's last CI run is red) | Arman to approve |
+| Review and merge PR #1 (CI green: backend 414 passed, web 116 passed, audits clean) | Arman |
 | Security residual risks: [`../security/security-review.md`](../security/security-review.md) | — |

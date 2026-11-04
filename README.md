@@ -73,7 +73,8 @@ uv run pytest -m live              # real Gemini and Telegram smoke tests
 uv run pytest -m eval tests/integration/test_agent_eval.py   # 35-scenario agent evaluation -> reports/eval-*.md
 ```
 
-Integration, live and evaluation runs share the `clinic_test` schema: run them one at a time.
+Integration, live and evaluation runs share the `clinic_test` schema: run them one at a time. If Windows
+Application Control blocks the `pytest.exe` launcher (os error 4551), use `uv run python -m pytest …`.
 
 ## Dashboard
 

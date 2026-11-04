@@ -31,18 +31,18 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 ## Branches
 
 - `main` on GitHub (`armankhan1999/Clinic_Appointment_System_AI`) = 00dac72 (pushed 2026-11-04, D-28). Its CI run 41797730819 failed 4 TLS unit tests (CI-01); the fix is on the feature branch.
-- `feat/m6-quality-e2e` (local, not pushed): review fixes, evaluation suite results, E2E hardening, packaging, CI web job, traceability gaps.
+- `feat/m6-quality-e2e` → PR #1 (https://github.com/armankhan1999/Clinic_Appointment_System_AI/pull/1): review fixes, evaluation suite results, E2E hardening, packaging, CI web job, traceability gaps, D-33, D-34. CI green on the PR (CI-02).
 
 ## Blockers and owner actions
 
 | ID | Item | Owner | Since |
 |---|---|---|---|
-| DEC-RT | Reply time: production 8 s budget gives 20/35 on this PC (all 15 failures are timeouts, no wrong answers); 35/35 with time. Choose: longer whole-turn budget with 8 s per model call, co-locate API/bot with the database, faster model tier (acceptance report) | Arman | 2026-11-04 |
+| DEC-RT | Reply time: option A done (D-34, 8 s per call / 25 s per turn + typing status) removed all turn-budget failures; the remaining 14/35 are single free-tier model calls over 8 s (AEV-PROD-02). Next lever: faster or paid model tier (option C); co-location (B) for the 3.9 s of database time | Arman | 2026-11-04 |
 | BLK-05 | Download the Supabase CA certificate to `infrastructure/db/prod-ca-2021.crt`, set `DB_SSL_ROOT_CERT`, compare its SHA-256 with `80:70:25:AD:…:72:E6:CA:FA` | Arman | 2026-11-03 |
 | BLK-06 | Telegram tap-through by a person (registration, booking, reminders) | Arman | 2026-11-03 |
 | SEC-ROT | Rotate the database password, Gemini key and bot token that were shared in chat | Arman | 2026-11-03 |
-| D-33 | Keep `cn@0.5.2` or switch to `clsx` + `tailwind-merge` | Arman | 2026-11-04 |
-| PUSH | Approve pushing `feat/m6-quality-e2e` (re-runs CI with the fix) | Arman | 2026-11-04 |
+| D-33 | ~~`cn@0.5.2`~~ Resolved: replaced by `clsx` 2.1.1 + `tailwind-merge` 3.7.0 | — | 2026-11-04 |
+| PR-1 | Review and merge PR #1 (`feat/m6-quality-e2e` → `main`); CI green on the PR | Arman | 2026-11-04 |
 | BLK-03 | Gemini free-tier RPM/RPD limits (AI Studio) | Arman | 2026-11-02 |
 
 Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-04 Telegram token.
