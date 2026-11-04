@@ -22,6 +22,9 @@ def make_settings(**overrides: Any) -> Settings:
         "gemini_model": "gemini-3.5-flash-lite",
         "clinic_timezone": "Asia/Kolkata",
         "auth_secret": "test-auth-secret-of-at-least-32-characters",
+        # Pinned so OS variables (CI sets DB_SSL=disable for its Postgres container) cannot leak in.
+        "db_ssl": "auto",
+        "db_ssl_root_cert": None,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)
