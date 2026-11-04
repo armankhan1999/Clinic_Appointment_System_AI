@@ -223,13 +223,18 @@ async def test_weekly_metrics_count_by_source_and_rate_no_shows(
             )
             appointment.status = status
             appointment.created_at = at(day - 1, 12)
+        walk_in = await make_appointment(session, doctor=doctor, patient=patient, start=at(11, 10))
+        walk_in.source, walk_in.status = "staff", "cancelled"
+        walk_in.cancelled_at, walk_in.cancelled_by_kind = at(10, 18), "staff"
+        await make_appointment(session, doctor=doctor, patient=patient, start=at(14, 9))  # next week
         await session.commit()
     async with api_client(settings, session_factory, lambda: NOW) as client:
         await login(client, "admin")
         week = (await client.get("/api/v1/metrics/weekly", params={"week_start": "2030-01-07"})).json()
     [row] = week["per_doctor"]
     assert (row["completed"], row["no_show"], row["no_show_rate"]) == (3, 1, 0.25)
-    assert week["bookings_by_source"]["bot"] == 4
+    assert week["bookings_by_source"] == {"bot": 4, "staff": 1}, "E6-S6-AC1: by source, this week only"
+    assert week["cancellations"] == 1
 
 
 async def test_staff_users_are_provisioned_and_unlocked_by_admins(

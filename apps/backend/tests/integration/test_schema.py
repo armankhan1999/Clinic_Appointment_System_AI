@@ -58,6 +58,26 @@ async def test_every_table_exists_with_row_level_security(
     assert all(found.values()), {name for name, rls in found.items() if not rls}
 
 
+async def test_patients_store_only_identity_consent_and_bookkeeping(
+    settings: Settings, session_factory: Factory
+) -> None:
+    """NFR-06: name, phone and Telegram ID only; no column for symptoms or other health details."""
+    async with session_factory() as session:
+        rows = await session.execute(
+            text(
+                "select column_name from information_schema.columns "
+                "where table_schema = :schema and table_name = 'patients'"
+            ),
+            {"schema": settings.db_test_schema},
+        )
+        columns = set(rows.scalars().all())
+    assert columns == {
+        "id", "telegram_user_id", "phone", "full_name",  # identity
+        "consent_at", "consent_source", "registered_via",  # consent (E1-S3)
+        "created_at", "updated_at", "deleted_at",  # bookkeeping and anonymisation (E1-S4)
+    }  # fmt: skip
+
+
 async def test_partial_unique_index_on_booked_slots_exists(
     settings: Settings, session_factory: Factory
 ) -> None:
