@@ -48,7 +48,7 @@ uv run clinic-bot     # terminal 2, then message your bot in Telegram and send /
 
 ## Dashboard
 
-The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 20.9+). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
+The staff dashboard is a Next.js app in [`apps/web`](apps/web/README.md) (Node.js 22+: the `cn` class-merging package requires it; Next.js alone needs 20.9+). The browser only talks to the dashboard's origin; `/api/v1/*` is rewritten to the API on `127.0.0.1:%API_PORT%`, so set `API_PORT` to the same value as the API (8010 on the original dev PC) **before** `npm run dev` or `npm run build`.
 
 ```powershell
 Set-Location apps/web

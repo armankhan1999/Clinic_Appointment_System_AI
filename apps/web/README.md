@@ -1,6 +1,6 @@
 # Front Desk (staff dashboard)
 
-Next.js 16 App Router, TypeScript (strict), Tailwind CSS v4, shadcn/ui (Radix), TanStack Query, React Hook Form + Zod. Built against the contract in [`docs/api/staff-api.md`](../../docs/api/staff-api.md); design rules in [`docs/design/design-system.md`](../../docs/design/design-system.md).
+Requires Node.js 22 or newer (the `cn` package declares `node >=22`). Next.js 16 App Router, TypeScript (strict), Tailwind CSS v4, shadcn/ui (Radix), TanStack Query, React Hook Form + Zod. Built against the contract in [`docs/api/staff-api.md`](../../docs/api/staff-api.md); design rules in [`docs/design/design-system.md`](../../docs/design/design-system.md).
 
 ## Run (PowerShell)
 
