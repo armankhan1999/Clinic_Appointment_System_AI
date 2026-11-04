@@ -83,6 +83,14 @@ export function isApiError(value: unknown): value is ApiError {
   return value instanceof ApiError;
 }
 
+/**
+ * True when a request got no HTTP answer at all (timeout or dropped connection). For a write,
+ * the server may still have done it, so the UI must not report it as "not done".
+ */
+export function isOutcomeUnknown(value: unknown): boolean {
+  return isApiError(value) && value.status === 0 && (value.code === "TIMEOUT" || value.code === "NETWORK_ERROR");
+}
+
 /** Wraps anything thrown into an ApiError so UI code handles one error type. */
 export function toApiError(value: unknown): ApiError {
   if (isApiError(value)) return value;

@@ -211,6 +211,10 @@ export function AttentionPanel() {
         confirmLabel={pending?.kind === "alert" ? "Acknowledge" : pending?.kind === "ticket" ? "Resolve" : "Clear flag"}
         pending={mutation.isPending}
         error={mutation.error}
+        unknownOutcome={{
+          title: "We couldn't confirm whether this was saved",
+          hint: "Check the attention list before trying again. It is refreshing now.",
+        }}
         onConfirm={() => {
           if (!pending) return;
           mutation.mutate(pending.item.id, { onSuccess: close });
