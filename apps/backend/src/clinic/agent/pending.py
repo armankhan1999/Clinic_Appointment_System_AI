@@ -28,6 +28,7 @@ class PendingStore:
         self._clock = clock
         self._ttl = ttl
         self._actions: dict[int, PendingAction] = {}
+        self._completed: dict[int, PendingAction] = {}  # last change carried out, per user
 
     def __len__(self) -> int:
         return len(self._actions)
@@ -39,6 +40,8 @@ class PendingStore:
         ]
         for uid in expired:
             del self._actions[uid]
+        for uid in [u for u, a in self._completed.items() if a.expires_at and a.expires_at < now]:
+            del self._completed[uid]
         action = PendingAction(secrets.token_urlsafe(9), kind, dict(params), now + self._ttl)
         self._actions[user_id] = action  # one pending action per user: a new one replaces the old
         return action
@@ -49,6 +52,20 @@ class PendingStore:
             return None
         del self._actions[user_id]
         if action.expires_at is not None and action.expires_at < self._clock():
+            return None
+        return action
+
+    def remember_completed(self, user_id: int, action: PendingAction) -> None:
+        """Record a change that was carried out, so a repeated tap on its button can be answered."""
+        self._completed[user_id] = action
+
+    def completed(self, user_id: int, token: str) -> PendingAction | None:
+        """The change this token already carried out, until the button would have expired anyway."""
+        action = self._completed.get(user_id)
+        if action is None or not secrets.compare_digest(action.token, token):
+            return None
+        if action.expires_at is not None and action.expires_at < self._clock():
+            del self._completed[user_id]
             return None
         return action
 

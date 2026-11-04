@@ -10,6 +10,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from clinic.agent.grounding import extract_times
 from clinic.agent.pending import PendingAction, PendingKind
 from clinic.domain.dates import Ambiguous, Resolved, resolve_date
 from clinic.domain.results import ResultCode
@@ -175,6 +176,14 @@ class CheckAvailabilityArgs(BaseModel):
     part_of_day: Literal["morning", "afternoon", "evening"] | None = Field(
         default=None, description="Only when the patient asked for a part of the day."
     )
+    time: str | None = Field(
+        default=None,
+        max_length=20,
+        description=(
+            "Only when the patient asked for one exact time, as they said it: for example '10:30 AM' or "
+            "'14:00'. The result then says whether that time is free and gives its slot_start."
+        ),
+    )
 
 
 def _day(day: dt.date) -> dict[str, str]:
@@ -215,7 +224,14 @@ async def check_availability(ctx: ToolContext, args: CheckAvailabilityArgs) -> T
             ResultCode.INVALID_DATE,
             {"problem": "The date was not understood. Ask for a day such as 'tomorrow' or '12 January'."},
         )
-    part = PartOfDay(args.part_of_day) if args.part_of_day else None
+    wanted: int | None = None
+    if args.time is not None:
+        times = extract_times(args.time)
+        if len(times) != 1:
+            return ToolResult(ResultCode.INVALID_ARGS, {"problem": "Give one clock time such as '10:30 AM'."})
+        [wanted] = times
+    # An exact time is looked up across the whole day, whatever part of the day was mentioned.
+    part = PartOfDay(args.part_of_day) if args.part_of_day and wanted is None else None
     result = await availability.day(args.doctor_id, resolution.day, part)
     if result.code is ResultCode.INVALID_DATE:
         return ToolResult(
@@ -229,7 +245,22 @@ async def check_availability(ctx: ToolContext, args: CheckAvailabilityArgs) -> T
         )
     if result.code is ResultCode.NOT_FOUND:
         return ToolResult(ResultCode.NOT_FOUND, {"problem": "No active doctor has that doctor_id."})
-    return ToolResult(result.code, _availability_payload(result, MAX_SLOTS_SHOWN))
+    payload = _availability_payload(result, MAX_SLOTS_SHOWN)
+    if wanted is not None:
+        match = next((s for s in result.slots if _minutes(s.start.astimezone(view.tz)) == wanted), None)
+        if match is None:
+            # The time itself is left out: a time that is not free never becomes evidence (grounding).
+            payload["requested_time_free"] = False
+        else:
+            payload["requested_slot"] = {
+                "slot_start": match.start.isoformat(),
+                "time": format_time_12h(match.start),
+            }
+    return ToolResult(result.code, payload)
+
+
+def _minutes(moment: dt.datetime) -> int:
+    return moment.hour * 60 + moment.minute
 
 
 CHECK_AVAILABILITY = ToolSpec(
@@ -238,7 +269,7 @@ CHECK_AVAILABILITY = ToolSpec(
         "Find free appointment slots for one doctor on one day. Returns up to 5 slots with their slot_start "
         "values, or the next dates that have free slots. Always use it before naming any time. When "
         "more_free_slots is present, other free times exist that are not listed: never call an unlisted time "
-        "unavailable; check it with book_appointment or ask for another part of the day."
+        "unavailable; check it with this tool's time argument or ask for another part of the day."
     ),
     args_model=CheckAvailabilityArgs,
     executor=check_availability,
@@ -347,7 +378,13 @@ async def list_my_appointments(ctx: ToolContext, args: NoArgs) -> ToolResult:
     view = await services.availability.settings()
     upcoming = await services.booking.upcoming_for_patient(ctx.patient_id)
     if not upcoming:
-        return ToolResult(ResultCode.NONE, {"appointments": []})
+        return ToolResult(
+            ResultCode.NONE,
+            {
+                "appointments": [],
+                "next_step": "Say there are no upcoming appointments and offer to book one.",
+            },
+        )
     return ToolResult(
         ResultCode.OK,
         {

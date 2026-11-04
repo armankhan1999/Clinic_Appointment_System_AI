@@ -79,10 +79,15 @@ class AppointmentActions:
 
     async def decide(self, user: IncomingUser, button: Literal["confirm", "change"], token: str) -> Reply:
         staged = self._pending.peek(user.telegram_user_id)
-        if staged is None or staged.kind not in STAGED_CHANGES:
-            return Reply(EXPIRED)
-        action = self._pending.pop(user.telegram_user_id, token)
+        action = None
+        if staged is not None and staged.kind in STAGED_CHANGES:
+            action = self._pending.pop(user.telegram_user_id, token)
         if action is None:
+            done = self._pending.completed(user.telegram_user_id, token)
+            if button == CONFIRM and done is not None and done.kind == "cancel":
+                return Reply(
+                    f"{done.params['reference']} is already cancelled; nothing has changed."
+                )  # E3-S3-AC3
             return Reply(EXPIRED)
         if button == CHANGE:
             return self._declined(user, action)
@@ -173,6 +178,8 @@ class AppointmentActions:
         outcome = await self._services.booking.cancel(
             patient_id=patient.id, appointment_id=UUID(p["appointment_id"])
         )
+        if outcome.code in (ResultCode.OK, ResultCode.ALREADY_CANCELLED):
+            self._pending.remember_completed(user.telegram_user_id, action)
         if outcome.code is ResultCode.OK:
             text = (
                 f"Cancelled: {p['reference']} with {p['doctor']} on {p['date']} at {p['time']}. "

@@ -141,6 +141,51 @@ async def test_tool_reports_ambiguous_and_unrecognised_dates(session_factory: Fa
     assert past.code == ResultCode.INVALID_DATE
 
 
+async def test_tool_confirms_one_exact_free_time_even_past_the_listed_five(session_factory: Factory) -> None:
+    """Eval BK-08: 'Thursday at 10:30' must be checkable although 10:30 is not among the first five times."""
+    doctor_id, service = await _setup(session_factory)
+    result = await check_availability(
+        _ctx(session_factory, service),
+        CheckAvailabilityArgs(doctor_id=doctor_id, date="today", time="2:30 PM"),
+    )
+    assert result.code == ResultCode.OK
+    assert "2:30 PM" not in [slot["time"] for slot in result.data["slots"]], "beyond the five listed"
+    assert result.data["requested_slot"] == {"slot_start": "2030-01-07T14:30:00+05:30", "time": "2:30 PM"}
+
+
+async def test_tool_says_an_exact_time_is_not_free_without_naming_it(session_factory: Factory) -> None:
+    doctor_id, service = await _setup(session_factory)
+    result = await check_availability(
+        _ctx(session_factory, service), CheckAvailabilityArgs(doctor_id=doctor_id, date="today", time="11:00")
+    )
+    assert result.data["requested_time_free"] is False
+    assert "requested_slot" not in result.data
+    assert "11:00" not in repr(result.data), "a time that is not free never appears in tool evidence"
+
+
+async def test_tool_rejects_a_time_it_cannot_read(session_factory: Factory) -> None:
+    doctor_id, service = await _setup(session_factory)
+    result = await check_availability(
+        _ctx(session_factory, service),
+        CheckAvailabilityArgs(doctor_id=doctor_id, date="today", time="soonish"),
+    )
+    assert result.code == ResultCode.INVALID_ARGS
+
+
+async def test_tool_asks_which_month_for_a_bare_day_near_month_end(session_factory: Factory) -> None:
+    """E2-S5-AC2: in the last days of a month, 'the 5th' could mean this month or next."""
+    doctor_id, _ = await _setup(session_factory)
+    month_end = datetime(2030, 1, 27, 8, 0, tzinfo=IST)
+    service = AvailabilityService(
+        session_factory, ClinicSettingsService(session_factory), clock=lambda: month_end
+    )
+    result = await check_availability(
+        _ctx(session_factory, service), CheckAvailabilityArgs(doctor_id=doctor_id, date="the 5th")
+    )
+    assert result.code == ResultCode.AMBIGUOUS_DATE
+    assert result.data == {"ask_patient": "Which month do you mean?"}
+
+
 async def test_now_is_utc_aware(session_factory: Factory) -> None:
     _, service = await _setup(session_factory)
     assert service.now().tzinfo is not None
