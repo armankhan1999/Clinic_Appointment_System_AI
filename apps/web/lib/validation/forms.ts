@@ -73,9 +73,14 @@ export const doctorFormSchema = z.object({ name: doctorText("name"), specialty: 
 export type DoctorForm = z.infer<typeof doctorFormSchema>;
 
 export const LEAVE_REASON_MAX = 200;
+// The API requires a reason (LeaveIn, 1–200 characters): affected patients are sent it.
 export const leaveFormSchema = z.object({
   date: isoDate,
-  reason: z.string().trim().max(LEAVE_REASON_MAX, { message: `Keep it under ${LEAVE_REASON_MAX} characters` }),
+  reason: z
+    .string()
+    .trim()
+    .min(1, { message: "Give a reason. Patients whose appointments are cancelled are sent it." })
+    .max(LEAVE_REASON_MAX, { message: `Keep it under ${LEAVE_REASON_MAX} characters` }),
 });
 export type LeaveForm = z.infer<typeof leaveFormSchema>;
 

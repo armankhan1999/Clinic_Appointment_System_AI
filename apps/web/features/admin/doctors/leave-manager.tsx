@@ -135,8 +135,14 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
                 <FieldError errors={[errors.date]} />
               </Field>
               <Field data-invalid={!!errors.reason}>
-                <FieldLabel htmlFor="leave-reason">Reason (optional, sent to affected patients)</FieldLabel>
-                <Input id="leave-reason" maxLength={LEAVE_REASON_MAX} placeholder="For example: Attending a conference" {...form.register("reason")} />
+                <FieldLabel htmlFor="leave-reason">Reason (sent to affected patients)</FieldLabel>
+                <Input
+                  id="leave-reason"
+                  maxLength={LEAVE_REASON_MAX}
+                  placeholder="For example: Attending a conference"
+                  aria-invalid={!!errors.reason}
+                  {...form.register("reason")}
+                />
                 <FieldDescription>Up to {LEAVE_REASON_MAX} characters.</FieldDescription>
                 <FieldError errors={[errors.reason]} />
               </Field>

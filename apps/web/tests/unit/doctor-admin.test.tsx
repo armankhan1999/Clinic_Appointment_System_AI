@@ -88,4 +88,21 @@ describe("LeaveManager", () => {
     const post = calls.find((c) => c.method === "POST" && c.url === "/api/v1/doctors/d-1/leaves");
     expect(post?.body).toEqual({ date: "2030-01-09", reason: "Conference", confirm_affected: true });
   });
+
+  it("asks for a reason before checking bookings, because the API refuses a leave without one", async () => {
+    const { calls } = stubFetch((call: StubbedCall) => {
+      if (call.url === "/api/v1/doctors/d-1/leaves" && call.method === "GET") return jsonResponse(200, { items: [] });
+      throw new Error(`unexpected ${call.method} ${call.url}`);
+    });
+
+    renderWithProviders(<LeaveManager doctorId="d-1" doctorName="Dr Rao" />);
+    fireEvent.change(await screen.findByLabelText("Day off"), { target: { value: "2030-01-09" } });
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Check bookings on this day" }));
+
+    expect(await screen.findByText("Give a reason. Patients whose appointments are cancelled are sent it.")).toBeTruthy();
+    expect(screen.getByLabelText(/Reason/).getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByText(/optional/i)).toBeNull();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(0);
+  });
 });

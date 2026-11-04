@@ -7,6 +7,7 @@ import {
   cancelSchema,
   faqFormSchema,
   isPlausiblePhone,
+  leaveFormSchema,
   newPatientSchema,
   parseAliases,
   parsePhrases,
@@ -133,6 +134,12 @@ describe("form schemas", () => {
     const mismatch = staffCreateSchema.safeParse({ ...base, password: "long-enough-pass", confirmPassword: "long-enough-pas" });
     expect(mismatch.error?.issues[0].path).toEqual(["confirmPassword"]);
     expect(staffCreateSchema.safeParse({ ...base, password: "long-enough-pass", confirmPassword: "long-enough-pass" }).success).toBe(true);
+  });
+
+  it("requires a leave reason of 1–200 characters (POST /doctors/{id}/leaves refuses an empty one)", () => {
+    expect(leaveFormSchema.safeParse({ date: "2030-01-09", reason: "   " }).success).toBe(false);
+    expect(leaveFormSchema.safeParse({ date: "2030-01-09", reason: "x".repeat(201) }).success).toBe(false);
+    expect(leaveFormSchema.safeParse({ date: "2030-01-09", reason: "Conference" }).success).toBe(true);
   });
 
   it("checks the settings time zone and part-of-day order", () => {
