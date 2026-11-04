@@ -167,7 +167,9 @@ export function LeaveManager({ doctorId, doctorName }: { doctorId: string; docto
                 <Field orientation="horizontal">
                   <Checkbox id="confirm-affected" checked={acknowledged} onCheckedChange={(v) => setAcknowledged(v === true)} />
                   <FieldLabel htmlFor="confirm-affected">
-                    I understand these {review.affected.length} appointment{review.affected.length === 1 ? "" : "s"} will be cancelled
+                    {review.affected.length === 1
+                      ? "I understand this appointment will be cancelled"
+                      : `I understand these ${review.affected.length} appointments will be cancelled`}
                   </FieldLabel>
                 </Field>
               </div>
