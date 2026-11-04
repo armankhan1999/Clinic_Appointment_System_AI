@@ -274,6 +274,27 @@ async def test_staff_users_are_provisioned_and_unlocked_by_admins(
     assert relogin.status_code == 200
 
 
+async def test_a_taken_username_is_a_conflict_not_a_server_error(
+    settings: Settings, session_factory: Factory
+) -> None:
+    await _clinic(session_factory)
+    async with api_client(settings, session_factory, lambda: NOW) as client:
+        csrf = await login(client, "admin")
+        duplicate = await client.post(
+            "/api/v1/staff-users",
+            json={
+                "username": "Riya",  # usernames are unique ignoring case; "riya" already exists
+                "display_name": "Another Riya",
+                "role": "receptionist",
+                "password": "a long enough pass",
+            },
+            headers=csrf,
+        )
+    assert duplicate.status_code == 409, duplicate.text
+    assert duplicate.json()["error"]["code"] == "CONFLICT"
+    assert "already" in duplicate.json()["error"]["message"].lower()
+
+
 async def test_password_reset_ends_the_users_existing_sessions(
     settings: Settings, session_factory: Factory
 ) -> None:

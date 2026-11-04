@@ -202,6 +202,27 @@ async def test_attention_panel_lists_tickets_alerts_and_flags(
     assert [f["staff_attention"]["reason"] for f in body["flagged"]] == ["reminder_failed"]
 
 
+async def test_a_refused_booking_names_the_limit_it_hit(settings: Settings, session_factory: Factory) -> None:
+    doctor_id, patient_id, _ = await _clinic(session_factory)
+
+    def booking(day: int, hour: int) -> dict[str, object]:
+        return {"doctor_id": doctor_id, "start": at(day, hour).isoformat(), "patient": {"id": patient_id}}
+
+    async with api_client(settings, session_factory, lambda: NOW) as client:
+        csrf = await login(client, "riya")
+        tuesday = await client.post("/api/v1/appointments", json=booking(8, 9), headers=csrf)
+        same_day = await client.post("/api/v1/appointments", json=booking(8, 10), headers=csrf)
+        for day in (9, 10):
+            later = await client.post("/api/v1/appointments", json=booking(day, 9), headers=csrf)
+            assert later.status_code == 201, later.text
+        fourth = await client.post("/api/v1/appointments", json=booking(11, 9), headers=csrf)
+    assert tuesday.status_code == 201, tuesday.text
+    # Live finding 2026-11-05: staff were told to cancel a booking when the rule was one per doctor per day.
+    assert (same_day.status_code, same_day.json()["error"]["code"]) == (409, "LIMIT_REACHED")
+    assert same_day.json()["error"]["details"]["reason"] == "same_doctor_same_day"
+    assert (fourth.status_code, fourth.json()["error"]["details"]["reason"]) == (409, "max_upcoming")
+
+
 async def test_walk_in_booking_and_the_shared_double_booking_rule(
     settings: Settings, session_factory: Factory
 ) -> None:

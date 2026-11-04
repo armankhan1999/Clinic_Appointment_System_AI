@@ -4,7 +4,9 @@ Source: `docs/requirements/source/brd-prd-backlog.md` (byte-identical copy of `C
 
 Rows marked **Source = BRD-PRD** are original requirements, quoted or condensed from the document without changing meaning. Rows in sections 14 and 15 are **not** original: `IMP-*` are requirements implied by original ones (needed to satisfy them), and `MP-*` come from the master execution prompt. Each one says where it came from.
 
-Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING, BLOCKED, FAILED, COMPLETED, DEFERRED_WITH_APPROVAL. Statuses are maintained in `docs/tracking/`; this file records the baseline.
+Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING, BLOCKED, FAILED, COMPLETED, DEFERRED_WITH_APPROVAL.
+
+**Which statuses are current.** In sections 1–13 the two status columns are the **baseline recorded on 2026-11-02, before any code existed**; they are kept as a record and are not current. The current status of every BO, BR, FR, NFR, EVAL item, story and acceptance criterion is in [`../tracking/requirement-traceability-matrix.md`](../tracking/requirement-traceability-matrix.md) and [`../tracking/user-story-tracker.md`](../tracking/user-story-tracker.md). The tracking files have no rows for the derived (IMP) and master-prompt (MP) requirements, so sections 14 and 15 carry their **current** status here, audited against the code on 2026-11-05 (commit 3938155).
 
 ## Extraction verification
 
@@ -21,7 +23,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 1. Business objectives (§2.2)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | BO-1 | Patients book without calling — measure: Booking scenarios the agent completes end to end | Business objective | BRD-PRD | 2.2 Business objectives · L50 | — | — | Must | — | Target: 90% or more | NOT_STARTED | NOT_STARTED |
 | BO-2 | No double bookings — measure: Double bookings in concurrency and scenario tests | Business objective | BRD-PRD | 2.2 Business objectives · L51 | — | — | Must | — | Target: 0 | NOT_STARTED | NOT_STARTED |
@@ -31,7 +33,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 2. Business requirements (§2.4)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | BR-01 | Patients can book an appointment with a chosen doctor through chat, at any hour | Business requirement | BRD-PRD | 2.4 Business requirements · L71 | E1, E2 | see FR FR-01, FR-02, FR-03, FR-04, FR-11 | Must | — | Via traced FRs and stories | NOT_STARTED | NOT_STARTED |
 | BR-02 | Patients can view, reschedule and cancel only their own appointments | Business requirement | BRD-PRD | 2.4 Business requirements · L72 | E3 | see FR FR-06 | Must | — | Via traced FRs and stories | NOT_STARTED | NOT_STARTED |
@@ -46,7 +48,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 3. Functional requirements (§3.3)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | FR-01 | Telegram onboarding with consent and phone-number sharing | Functional | BRD-PRD | 3.3 Functional requirements · L150 | E1 | E1-S1, E1-S2, E1-S3 | Must | — | E1-S1-AC1, E1-S1-AC2, E1-S1-AC3, E1-S2-AC1, E1-S2-AC2, E1-S2-AC3, E1-S2-AC4, E1-S3-AC1, E1-S3-AC2, E1-S3-AC3 | NOT_STARTED | NOT_STARTED |
 | FR-02 | List active doctors and specialties | Functional | BRD-PRD | 3.3 Functional requirements · L151 | E2 | E2-S1 | Must | — | E2-S1-AC1, E2-S1-AC2, E2-S1-AC3 | NOT_STARTED | NOT_STARTED |
@@ -69,7 +71,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 4. Non-functional requirements (§3.5)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | NFR-01 | Performance — Bot reply time | Non-functional | BRD-PRD | 3.5 Non-functional requirements · L211 | — | E7-S5 | Must | — | Target: 5 s or less for 95% of test messages (depends on the LLM provider) | NOT_STARTED | NOT_STARTED |
 | NFR-02 | Reliability — Reminders | Non-functional | BRD-PRD | 3.5 Non-functional requirements · L212 | — | E4-S1 | Must | — | Target: No duplicate or missed reminders across app restarts | NOT_STARTED | NOT_STARTED |
@@ -85,7 +87,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 5. Agent design rules (§3.4)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | AGT-01 | Message loop step 1: The guardrail layer checks the message first: emergency keywords, rate limit, length. | Agent design | BRD-PRD | 3.4 Agent design · L173 | — | E5-S3, E7-S3 | Must | — | — | NOT_STARTED | NOT_STARTED |
 | AGT-02 | Message loop step 2: The LLM receives the system prompt, the recent conversation and the tool definitions. | Agent design | BRD-PRD | 3.4 Agent design · L174 | — | E7-S5 | Must | — | — | NOT_STARTED | NOT_STARTED |
@@ -104,7 +106,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 6. Agent tools (§3.4)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | TOOL-01 | `list_doctors` — Active doctors and specialties; LLM inputs: specialty (optional); writes data: No; needs Confirm tap: No | Agent tool contract | BRD-PRD | 3.4 Agent design — Tools · L194 | — | — | Must | — | — | NOT_STARTED | NOT_STARTED |
 | TOOL-02 | `check_availability` — Free slots; LLM inputs: doctor_id, date, part_of_day; writes data: No; needs Confirm tap: No | Agent tool contract | BRD-PRD | 3.4 Agent design — Tools · L195 | — | — | Must | — | — | NOT_STARTED | NOT_STARTED |
@@ -117,7 +119,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 7. Data model (§3.6)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | DM-00 | Slots are computed from schedules minus leave minus booked appointments, so there is no slots table. | Data rule | BRD-PRD | 3.6 Data model · L225 | — | E2-S2, E2-S4 | Must | — | — | NOT_STARTED | NOT_STARTED |
 | DM-01 | Table `patients` — key fields: id, telegram_user_id, phone, full_name, consent_at, deleted_at; rules: telegram_user_id and phone unique | Data | BRD-PRD | 3.6 Data model · L229 | — | — | Must | — | — | NOT_STARTED | NOT_STARTED |
@@ -134,7 +136,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 8. Evaluation and acceptance targets (§3.9)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | EVAL-01 | Booking happy paths: 8 scenarios | Evaluation target | BRD-PRD | 3.9 Evaluation and acceptance · L268 | E7 | E7-S5 | Must | — | Pass target: 90% or more | NOT_STARTED | NOT_STARTED |
 | EVAL-02 | Reschedule and cancel: 6 scenarios | Evaluation target | BRD-PRD | 3.9 Evaluation and acceptance · L269 | E7 | E7-S5 | Must | — | Pass target: 90% or more | NOT_STARTED | NOT_STARTED |
@@ -147,7 +149,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 9. Core user journeys (§3.2)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | JRN-01 | First booking: patient sends /start, accepts the consent notice, shares their phone number, gives their name, asks for a doctor and day, picks a slot, taps Confirm, gets a reference number. | User journey | BRD-PRD | 3.2 Core user journeys · L139 | — | E1-S1, E1-S2, E1-S3, E2-S1, E2-S2, E2-S3 | Must | — | — | NOT_STARTED | NOT_STARTED |
 | JRN-02 | Reschedule: patient asks to move an appointment, sees free slots with the same doctor, taps Confirm; the old slot is released. | User journey | BRD-PRD | 3.2 Core user journeys · L140 | — | E3-S2 | Must | — | — | NOT_STARTED | NOT_STARTED |
@@ -158,7 +160,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 10. Scope, constraints, assumptions, risks, success criteria
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | SCP-IN-01 | Telegram bot for patients: registration, booking, viewing, rescheduling, cancelling, reminders, clinic FAQs, human handoff | Scope (in) | BRD-PRD | 2.5 Scope · L86 | — | — | Must | — | — | NOT_STARTED | NOT_STARTED |
 | SCP-IN-02 | Web dashboard for staff: login, daily schedule, doctor schedules and leave, walk-in booking, attendance | Scope (in) | BRD-PRD | 2.5 Scope · L87 | — | — | Must | — | — | NOT_STARTED | NOT_STARTED |
@@ -213,7 +215,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 12. Epics (§4)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | E1 | Patient Onboarding and Consent. Objective: Identify each patient reliably and collect only the data needed, with consent. Scope: In: Telegram start, phone sharing, name, consent, data deletion. Out: email or password accounts. | Epic | BRD-PRD | Epic E1 · L284 | E1 | E1-S1, E1-S2, E1-S3, E1-S4 | — | — | Success metric: 100% of registered patients have a consent timestamp and a verified phone number. DoD: All P0 stories pass their acceptance criteria and unit tests on the demo database. | NOT_STARTED | NOT_STARTED |
 | E2 | Appointment Booking. Objective: Let patients book a correct, conflict-free appointment through chat at any hour. Scope: In: doctors list, availability, confirmed booking, double-booking prevention, relative dates. Out: payments, triage. | Epic | BRD-PRD | Epic E2 · L347 | E2 | E2-S1, E2-S2, E2-S3, E2-S4, E2-S5 | — | — | Success metric: 90% or more of booking scenarios complete end to end; 0 double bookings. DoD: Concurrency test passes; booking scenarios in the evaluation suite pass. | NOT_STARTED | NOT_STARTED |
@@ -225,7 +227,7 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 13. User stories and acceptance criteria (§4)
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
+| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Baseline impl. status (2026-11-02) | Baseline test status (2026-11-02) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | E1-S1 | Start a conversation — As a PATIENT, I want to start a chat with the clinic bot on Telegram, so that I can book without calling. [sprint 1, 2 pts; FR: FR-01] | User story | BRD-PRD | E1-S1 · L292 | E1 | E1-S1 | Must (P0) | — | E1-S1-AC1, E1-S1-AC2, E1-S1-AC3 | NOT_STARTED | NOT_STARTED |
 | E1-S1-AC1 | Given a new Telegram user, When they send /start, Then the bot greets them with the clinic name, says it handles appointments only and cannot give medical advice, and shows a Share phone number button. | Acceptance criterion | BRD-PRD | E1-S1 · L300 | E1 | E1-S1 | Must (P0) | — | (self) | NOT_STARTED | NOT_STARTED |
@@ -363,42 +365,44 @@ Status values: NOT_STARTED, ANALYSIS, READY, IN_PROGRESS, CODE_COMPLETE, TESTING
 
 ## 14. Implied requirements (DERIVED — not stated as stories in the source)
 
-Each one is needed to satisfy an original requirement. None is presented as original; each cites what it derives from. They remain `ANALYSIS` until approved (see `docs/tracking/decision-log.md`).
+Each one is needed to satisfy an original requirement. None is presented as original; each cites what it derives from. They were added by D-11 and approved with the design spec by D-22.
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| IMP-01 | Admin can add, edit and deactivate doctors (name, specialty, active) | Implied (derived) | DERIVED | Derived from: E2-S1-AC2 relies on an `active` flag; no story manages doctors · L— | E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-02 | Admin FAQ editor for `clinic_info` entries | Implied (derived) | DERIVED | Derived from: E5-S1-AC3 ('admin updates an FAQ entry'), E6-S1-AC4 (FAQ is an admin-only screen), DM `clinic_info` 'Edited by admin only' · L— | E5, E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-03 | Admin audit-log viewer | Implied (derived) | DERIVED | Derived from: E7-S2-AC3 ('only admins can view it'), BO-5 · L— | E7 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-04 | Staff account provisioning and unlock (create users, set role, reset lockout) | Implied (derived) | DERIVED | Derived from: E6-S1 needs staff users to exist; no story creates them · L— | E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-05 | Clinic settings: name, phone, address, staff hours, time zone, emergency number, emergency phrase list, cut-off, booking window, per-patient limits | Implied (derived) | DERIVED | Derived from: A7, glossary 'Cut-off', E1-S1-AC1/AC3, E2-S2-AC3, E5-S3-AC1, E5-S4-AC1, stakeholder 'approves configuration' · L— | E7 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-06 | Persisted emergency alerts that staff can acknowledge, storing no message text | Implied (derived) | DERIVED | Derived from: E5-S3-AC3, E6-S2-AC3; NFR-06 data minimization · L— | E5, E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-07 | Handoff tickets record resolver and resolution time | Implied (derived) | DERIVED | Derived from: E5-S4-AC2 ('status and resolver are saved'); DM `handoff_tickets` lacks these fields · L— | E5 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-08 | Appointment records the patient's reminder Confirm (e.g. `patient_confirmed_at`) | Implied (derived) | DERIVED | Derived from: E4-S3-AC1; status enum (DM-05) has no 'confirmed' value · L— | E4 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-09 | Appointment flag when a clinic-side notification fails after retries | Implied (derived) | DERIVED | Derived from: E4-S4-AC2 · L— | E4 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-10 | Unique human-readable appointment reference `APT-NNNNNN` | Implied (derived) | DERIVED | Derived from: E2-S3-AC2, E3-S1-AC1 · L— | E2 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-11 | Request/correlation ID per message propagated through logs and audit | Implied (derived) | DERIVED | Derived from: NFR-11 · L— | E7 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-12 | Precise definitions: part-of-day boundaries, 'near month end', 'next Monday', booking-window inclusivity, 'failed the same task 3 times', no-show-rate denominator | Implied (derived) | DERIVED | Derived from: FR-03, E2-S5-AC2, E5-S4-AC1, E6-S6-AC1 · L— | E2, E5, E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-13 | Conversation state (last 20 messages, pending confirmations) held in memory only; a Confirm tap after a restart fails safely | Implied (derived) | DERIVED | Derived from: NFR-07, AGT confirmation gate · L— | E2, E3 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-14 | Walk-in/phone patients can exist without a Telegram ID and link later when they register with the same phone | Implied (derived) | DERIVED | Derived from: E6-S4-AC1, E1-S2-AC4, DM-01 uniqueness · L— | E1, E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
-| IMP-15 | Appointment status state machine (booked → cancelled / completed / no_show) enforced in the booking service | Implied (derived) | DERIVED | Derived from: DM-05 status values, E3-S3-AC3, E6-S5 · L— | E2, E3, E6 | — | — | — | — | ANALYSIS | NOT_STARTED |
+How the status was checked (2026-11-05): the code was read in this audit; the tests named below exist in `apps/backend/tests` (or `apps/web/tests`) and are recorded as passing in [`../tracking/test-execution-tracker.md`](../tracking/test-execution-tracker.md), run **M6-FULL-04** (419 passed, 0 failed on `main` 2fcf421) unless another run is named. The tests were **not** re-run for this audit. Code paths are relative to `apps/backend/src/clinic/` unless they start with `apps/`.
+
+| Requirement ID | Description | Derived from | Related epic | Status (2026-11-05) | Evidence: code | Evidence: tests |
+|---|---|---|---|---|---|---|
+| IMP-01 | Admin can add, edit and deactivate doctors (name, specialty, active) | E2-S1-AC2 relies on an `active` flag; no story manages doctors | E6 | COMPLETED | `POST /doctors`, `PATCH /doctors/{id}` (`api/routes_admin.py`, `services/admin.py`); screens in `apps/web/features/admin/doctors/` | `test_doctors_can_be_added_edited_and_deactivated` |
+| IMP-02 | Admin FAQ editor for `clinic_info` entries | E5-S1-AC3, E6-S1-AC4, DM `clinic_info` "Edited by admin only" | E5, E6 | COMPLETED | `GET/POST/PATCH/DELETE /faq`; `apps/web/features/admin/faq/faq-editor.tsx`; the bot reads the table on every question (`services/faq.py`) | `test_faq_entries_are_managed_and_validated`, `test_an_updated_answer_is_used_on_the_next_question` |
+| IMP-03 | Admin audit-log viewer | E7-S2-AC3, BO-5 | E7 | COMPLETED | `GET /audit` (admin only, paginated, filters); `apps/web/features/admin/audit/audit-log.tsx` | `test_audit_log_is_paginated_and_filtered_for_admins`, `test_audit_dates_are_whole_days_in_clinic_time`, `test_receptionists_cannot_open_admin_screens` |
+| IMP-04 | Staff account provisioning and unlock (create users, set role, reset lockout) | E6-S1 needs staff users to exist; no story creates them | E6 | COMPLETED (one gap in the dashboard) | `GET/POST/PATCH /staff-users`, `POST /staff-users/{id}/unlock`; first admin via `apps/backend/scripts/create_admin.py`; screen `apps/web/features/admin/staff/staff-accounts.tsx`. **Gap:** the API can reset a password (`PATCH` with `password`, which also ends that user's sessions), but the dashboard has no control for it (`apps/web/lib/api/endpoints.ts` `updateStaffUser` sends no password) | `test_staff_users_are_provisioned_and_unlocked_by_admins`, `test_password_reset_ends_the_users_existing_sessions`, `tests/integration/test_create_admin.py` |
+| IMP-05 | Clinic settings: name, phone, address, staff hours, time zone, emergency number, emergency phrase list, cut-off, booking window, per-patient limits | A7, glossary "Cut-off", E1-S1-AC1/AC3, E2-S2-AC3, E5-S3-AC1, E5-S4-AC1 | E7 | COMPLETED | Single-row `clinic_settings` (migration 0001, also `morning_end`/`afternoon_end`); `GET/PATCH /settings`; `services/clinic_settings.py` (30 s cache, so the bot sees an edit within 30 s); `apps/web/features/admin/settings/settings-form.tsx`. Defaults come from `apps/backend/scripts/seed.py`; only the time zone comes from `.env` (`CLINIC_TIMEZONE`) | `test_settings_can_be_read_and_changed_with_validation` |
+| IMP-06 | Persisted emergency alerts that staff can acknowledge, storing no message text | E5-S3-AC3, E6-S2-AC3; NFR-06 | E5, E6 | COMPLETED | Table `emergency_alerts` has no text column (migration 0001); `services/alerts.py` (one alert per sender per 10 minutes); `GET /attention`, `POST /alerts/{id}/acknowledge` | `test_alerts_store_no_message_text`, `test_repeated_alerts_from_one_sender_are_deduplicated_for_ten_minutes`, `test_tickets_resolve_and_alerts_acknowledge_with_the_staff_member` |
+| IMP-07 | Handoff tickets record resolver and resolution time | E5-S4-AC2; DM `handoff_tickets` lacks these fields | E5 | COMPLETED | `handoff_tickets.resolved_by`, `resolved_at` (migration 0001); `POST /tickets/{id}/resolve` (`services/staff_ops.py`) | `test_tickets_resolve_and_alerts_acknowledge_with_the_staff_member` |
+| IMP-08 | Appointment records the patient's reminder Confirm (`patient_confirmed_at`) | E4-S3-AC1; status enum (DM-05) has no "confirmed" value | E4 | COMPLETED | `appointments.patient_confirmed_at` (migration 0001); `services/booking.py` `confirm_presence`; `patient_confirmed` in the staff API | `test_reminder_confirm_marks_the_appointment_confirmed` |
+| IMP-09 | Appointment flag when a clinic-side notification fails after retries | E4-S4-AC2 | E4 | COMPLETED | `appointments.staff_attention_reason` / `staff_attention_at`; set to `notification_failed` after 3 attempts (`services/notifications.py`) and to `reminder_failed` after a reminder's first attempt plus 3 retries (`services/reminders.py`); `GET /attention`, `POST /appointments/{id}/clear-attention` | `test_failures_back_off_then_flag_the_appointment_for_staff`, `test_delivery_is_retried_three_times_then_flagged_for_staff`, `test_attention_panel_lists_tickets_alerts_and_flags` |
+| IMP-10 | Unique human-readable appointment reference `APT-NNNNNN` | E2-S3-AC2, E3-S1-AC1 | E2 | COMPLETED | `appointment_ref_seq` + `format_appointment_ref` (migration 0001): `APT-` and at least 6 digits, growing past 6 rather than wrapping; UNIQUE `uq_appointments_ref` | `test_references_are_sequential_and_zero_padded`, `test_reference_format_keeps_growing_past_six_digits` |
+| IMP-11 | Request/correlation ID per message propagated through logs and audit | NFR-11 | E7 | COMPLETED | Bot: a new ID per Telegram update (`conversation/service.py` `_guarded`), carried in `ToolContext.request_id` into audit rows; API: `X-Request-ID` accepted when well formed, otherwise generated, and returned on every response (`api/app.py`); audit rows take the bound ID (`services/audit.py`) | `test_each_message_gets_its_own_request_id_shared_by_its_tool_calls`, `test_healthz_is_ok_and_echoes_a_well_formed_request_id`, `tests/unit/test_observability.py` |
+| IMP-12 | Precise definitions: part-of-day boundaries, "near month end", "next Monday", booking-window inclusivity, "failed the same task 3 times", no-show-rate denominator | FR-03, E2-S5-AC2, E5-S4-AC1, E6-S6-AC1 | E2, E5, E6 | COMPLETED | `domain/slots.py` (`part_of_day`, `booking_window` inclusive, `slot.start > now`); `domain/dates.py` (last 7 days of a month → `AMBIGUOUS_DATE`; `next <weekday>` strictly after today); `conversation/service.py` (`FAILURE_CODES`, 3 in a row per tool); `services/admin.py` `weekly_metrics` | `tests/unit/test_domain_dates.py`, `tests/unit/test_domain_slots.py`, `test_three_failures_of_one_tool_offer_a_talk_to_staff_button`, `test_weekly_metrics_count_by_source_and_rate_no_shows` |
+| IMP-13 | Conversation state (last 20 messages, pending confirmations) held in memory only; a Confirm tap after a restart fails safely | NFR-07, AGT confirmation gate | E2, E3 | COMPLETED | `agent/memory.py` (last 10 exchanges, i.e. 20 patient and assistant messages with their tool steps; forgotten after 2 h idle); `agent/pending.py` (10-minute expiry); `conversation/registration.py` (1 h expiry); unknown or expired buttons get "This request has expired, please ask again." | `test_memory_keeps_the_last_ten_exchanges_per_user`, `test_memory_forgets_an_idle_conversation`, `test_expired_actions_cannot_be_confirmed_and_are_pruned`, `test_unknown_or_stale_button_is_answered_safely` |
+| IMP-14 | Walk-in/phone patients can exist without a Telegram ID and link later when they register with the same phone | E6-S4-AC1, E1-S2-AC4, DM-01 uniqueness | E1, E6 | COMPLETED | `patients.telegram_user_id` nullable; `services/staff_ops.py` `_create_walk_in` (needs `verbal_consent: true`); `services/patients.py` links the walk-in on Telegram registration | `test_walk_in_with_same_phone_is_linked_not_duplicated`, `test_walk_in_booking_and_the_shared_double_booking_rule` (run L1-01), `test_walk_in_patient_without_telegram_gets_nothing` |
+| IMP-15 | Appointment status state machine (booked → cancelled / completed / no_show) enforced in the booking service | DM-05 status values, E3-S3-AC3, E6-S5 | E2, E3, E6 | COMPLETED | `domain/appointments.py` `can_transition` (admin-only completed ↔ no_show correction), used by `services/staff_ops.py`; CHECK `ck_appointments_status` (migration 0001) | `tests/unit/test_domain_appointments.py`, `test_attendance_rules` |
 
 ## 15. Delivery requirements from the master execution prompt (MP — user instruction, not in the BRD)
 
-Where these conflict with the BRD/PRD, the conflict is recorded in `docs/tracking/decision-log.md` and awaits a decision. They are not BRD requirements.
+These are not BRD requirements. Where they conflicted with the BRD/PRD, the conflict was decided in `docs/tracking/decision-log.md` (see `document-analysis.md` §9). Status audited 2026-11-05.
 
-| Requirement ID | Description | Type | Source | Section / line | Related epic | Related story | Priority | Dependencies | Acceptance criteria | Implementation status | Testing status |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| MP-01 | Stack: Next.js App Router + TS + Tailwind + shadcn/ui frontend; FastAPI + Pydantic + SQLAlchemy 2 + Alembic backend; Supabase/PostgreSQL with RLS; LangGraph agent — 'unless the source requirements establish a justified incompatibility' — note: Conflicts with BRD §3.7 / §3.4 / A5 → decision D-01 | Delivery (master prompt) | MASTER-PROMPT | MP §5 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-02 | Premium, accessible, responsive staff UI and `docs/design/design-system.md` — note: Depends on D-01 | Delivery (master prompt) | MASTER-PROMPT | MP §6 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-03 | Architecture docs: system, component, ERD, agent workflow, API, deployment, auth flow in `docs/architecture/` | Delivery (master prompt) | MASTER-PROMPT | MP §7 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-04 | Agent safeguards: no invented slots/doctors, confirm before writes, idempotency, race handling, timezone, status transitions, escalation — note: Consistent with BRD §3.4 | Delivery (master prompt) | MASTER-PROMPT | MP §8 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-05 | Security & privacy docs: security-architecture, threat-model, privacy-assessment (DPDP Act 2023; HIPAA only if applicable), security-checklist — note: BRD §2.6 puts legal review out of project scope; docs still produced, no compliance claim | Delivery (master prompt) | MASTER-PROMPT | MP §9 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-06 | API documentation `docs/api/api-documentation.md`; versioned REST, pagination, consistent errors, rate limiting, OpenAPI | Delivery (master prompt) | MASTER-PROMPT | MP §11 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-07 | Testing: unit, integration (real DB), E2E (Playwright), agent, security, performance; evidence for every AC — note: Extends BRD NFR-10 / E7-S5 | Delivery (master prompt) | MASTER-PROMPT | MP §12 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-08 | Trackers: PROJECT_TRACKER.md and docs/tracking/* kept current | Delivery (master prompt) | MASTER-PROMPT | MP §3 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-09 | CI/CD, production deployment config, monitoring, backups, runbooks — note: BRD E7 scope: 'Out: cloud production hosting' → decision D-06 | Delivery (master prompt) | MASTER-PROMPT | MP §9, §13 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
-| MP-10 | Final acceptance report `docs/final/project-acceptance-report.md` from tracker evidence | Delivery (master prompt) | MASTER-PROMPT | MP §19 · L— | — | — | — | — | — | ANALYSIS | NOT_STARTED |
+| Requirement ID | Description | Source | Status (2026-11-05) | Evidence and what is missing |
+|---|---|---|---|---|
+| MP-01 | Stack: Next.js App Router + TS + Tailwind + shadcn/ui frontend; FastAPI + Pydantic + SQLAlchemy 2 + Alembic backend; Supabase/PostgreSQL with RLS; LangGraph agent, "unless the source requirements establish a justified incompatibility" | MP §5 | COMPLETED except LangGraph (D-01) | `apps/web/package.json` (Next.js 16.4.4, Tailwind 4.3.4, Radix-based shadcn/ui); `apps/backend/pyproject.toml` (FastAPI, Pydantic, SQLAlchemy 2.1, Alembic); Supabase Postgres (D-02). RLS is enabled on every table with an app-role-only policy; it is defence in depth, not per-patient isolation. **LangGraph is not used**: the source's plain SDK loop was kept (AGT-14, D-01). |
+| MP-02 | Premium, accessible, responsive staff UI and `docs/design/design-system.md` | MP §6 | COMPLETED (no automated accessibility audit) | `docs/design/design-system.md`; `apps/web`. Dashboard E2E: 18 passed (WEB-E2E-04). There is **no automated accessibility check** (no axe or Lighthouse run in the repository); the accessibility rules are design rules, not measured results. |
+| MP-03 | Architecture docs: system, component, ERD, agent workflow, API, deployment, auth flow in `docs/architecture/` | MP §7 | COMPLETED | `docs/architecture/` (system context and deployment, package layering, ERD, agent pipeline, endpoint catalogue and auth flow), audited against the code on 2026-11-05. |
+| MP-04 | Agent safeguards: no invented slots/doctors, confirm before writes, idempotency, race handling, timezone, status transitions, escalation | MP §8 | COMPLETED | Grounding guard (`agent/grounding.py`); confirmation gate with re-validation on Confirm (`agent/pending.py`, `services/booking.py`); idempotency: single-use Confirm tokens, reminder claim on UNIQUE `(appointment_id, type)`, one open ticket per patient (partial unique index); races: partial unique index + exclusion constraint + patient row lock; clinic time zone for all dates; state machine (`domain/appointments.py`); escalation (`handoff_to_staff`, "Talk to staff" after 3 failures). |
+| MP-05 | Security & privacy docs: security-architecture, threat-model, privacy-assessment (DPDP Act 2023; HIPAA only if applicable), security-checklist | MP §9 | PARTIAL | Written: `docs/security/threat-model.md`, `docs/security/security-review.md` (controls mapped to OWASP Top 10 2021); the security architecture is in `docs/architecture/api-and-auth.md` rather than a separate file. **Not written: a privacy assessment and a separate security checklist.** No compliance is claimed. |
+| MP-06 | API documentation `docs/api/api-documentation.md`; versioned REST, pagination, consistent errors, rate limiting, OpenAPI | MP §11 | COMPLETED with differences | The contract is `docs/api/staff-api.md` (not `api-documentation.md`). Versioned under `/api/v1`; `page`/`page_size` pagination on `/faq`, `/staff-users`, `/audit`; one error envelope; OpenAPI and Swagger UI only when `ENV=development` (`api/app.py`). **Rate limiting exists only on login** (10 attempts per minute per client); other routes have none. |
+| MP-07 | Testing: unit, integration (real DB), E2E (Playwright), agent, security, performance; evidence for every AC | MP §12 | PARTIAL | Backend unit + integration on Postgres: 419 passed (M6-FULL-04); dashboard unit/component: 119 passed (WEB-UNIT-04); Playwright E2E: 18 passed (WEB-E2E-04, run locally, **not in CI**); agent evaluation suite with 38 scenarios (the final run at production settings has **no figures**: AEV-PROD-04 and AEV-PROD-05 were stopped by the Gemini free-tier quota); security checks live inside these suites (role matrix, CSRF, lockout, TLS). **Missing:** a performance or load test (only the latency measurement DB-LAT-01), and full evidence for every AC (the traceability matrix still lists E2-S1-AC3 as PARTIAL). |
+| MP-08 | Trackers: PROJECT_TRACKER.md and docs/tracking/* kept current | MP §3 | IN_PROGRESS (owned by the lead) | The files exist. Their currency was not audited here, but `docs/tracking/release-readiness.md` still describes the "discovery phase" with every gate NOT_STARTED, so at least that file is stale. |
+| MP-09 | CI/CD, production deployment config, monitoring, backups, runbooks | MP §9, §13 | PARTIAL (scope limited by D-05) | CI: `.github/workflows/ci.yml` (backend lint, format, types, migration of the test schema, unit + integration tests, pip-audit; web lint, types, unit tests, build, npm audit). Runbook: `docs/operations/runbook.md`. **Not built:** continuous deployment, a production deployment configuration (D-05: no live cloud deployment; D-31: no Docker Compose), monitoring beyond `/healthz`, `/readyz`, JSON logs and the scheduler heartbeat, and a documented backup/restore procedure. (The baseline row cited D-06 here; the hosting decision is D-05.) |
+| MP-10 | Final acceptance report `docs/final/project-acceptance-report.md` from tracker evidence | MP §19 | PARTIAL | The report is `docs/testing/acceptance-report.md` (no `docs/final/` folder), dated 2026-11-04 with later additions. Its open items include the final 38-scenario evaluation at production settings, BLK-05 (verified database TLS) and BLK-06 (a person tapping through Telegram). |
 
 ## 16. Open questions in the source (§6)
 

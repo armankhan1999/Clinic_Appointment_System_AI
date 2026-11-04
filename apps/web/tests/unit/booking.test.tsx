@@ -62,6 +62,35 @@ describe("BookingFlow", () => {
     expect((screen.getByRole("button", { name: "Book appointment" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it.each([
+    ["same_doctor_same_day", /already has an appointment with this doctor on this day/, /Cancel one of theirs first/],
+    ["max_upcoming", /Cancel one of theirs first/, /with this doctor on this day/],
+  ])("explains which booking limit refused the booking (%s)", async (reason, shown, notShown) => {
+    stubFetch((call: StubbedCall) => {
+      if (call.url.startsWith("/api/v1/doctors")) return jsonResponse(200, { items: [doctor] });
+      if (call.url.startsWith("/api/v1/availability")) return jsonResponse(200, { date: "2030-01-09", slots: slotsFirst });
+      if (call.url.startsWith("/api/v1/patients")) {
+        return jsonResponse(200, { items: [{ id: "p-1", full_name: "Test Patient", phone: "+91 90000 00000" }] });
+      }
+      if (call.url === "/api/v1/auth/me") return jsonResponse(200, sessionBody());
+      if (call.url === "/api/v1/appointments") {
+        return jsonResponse(409, errorEnvelope("LIMIT_REACHED", "The patient has reached the booking limit.", { details: { reason } }));
+      }
+      throw new Error(`unexpected ${call.method} ${call.url}`);
+    });
+
+    renderWithProviders(<BookingFlow />);
+    await chooseDoctor();
+    fireEvent.click(await screen.findByRole("radio", { name: "9:30 AM" }));
+    fireEvent.change(screen.getByLabelText("Patient's phone number"), { target: { value: "+91 90000 00000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Find patient" }));
+    await waitFor(() => expect((screen.getByRole("radio", { name: /Test Patient/ }) as HTMLInputElement).checked).toBe(true));
+    fireEvent.click(screen.getByRole("button", { name: "Book appointment" }));
+
+    expect(await screen.findByText(shown)).toBeTruthy();
+    expect(screen.queryByText(notShown)).toBeNull();
+  });
+
   it("registers a new patient only with verbal consent, then confirms the booking with its reference", async () => {
     const { calls } = stubFetch((call: StubbedCall) => {
       if (call.url.startsWith("/api/v1/doctors")) return jsonResponse(200, { items: [doctor] });

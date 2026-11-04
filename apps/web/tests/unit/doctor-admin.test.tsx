@@ -80,7 +80,8 @@ describe("LeaveManager", () => {
     const confirm = screen.getByRole("button", { name: "Cancel 1 appointment and add leave" }) as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /I understand/ }));
+    // Live finding 2026-11-05: the label read "these 1 appointment".
+    fireEvent.click(screen.getByRole("checkbox", { name: "I understand this appointment will be cancelled" }));
     expect(confirm.disabled).toBe(false);
     fireEvent.click(confirm);
 

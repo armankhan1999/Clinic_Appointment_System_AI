@@ -486,6 +486,10 @@ class AdminService:
             )
         except (WeakPasswordError, InvalidUsernameError) as exc:
             raise _refuse(str(exc)) from exc
+        except IntegrityError as exc:
+            if constraint_name(exc) != "ux_staff_users_username_lower":
+                raise
+            raise OperationRefusedError("CONFLICT", "That username is already taken.") from exc
         return StaffUserOut(user.id, user.username, user.display_name, user.role, user.active, None)
 
     async def update_staff_user(

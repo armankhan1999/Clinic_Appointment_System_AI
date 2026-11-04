@@ -34,6 +34,13 @@ const NEW_PATIENT_API_FIELDS = {
 
 const SLOT_GONE_CODES = new Set(["SLOT_TAKEN", "SLOT_UNAVAILABLE"]);
 
+/** LIMIT_REACHED `details.reason` from the API: tell staff which rule refused the booking. */
+const LIMIT_HINTS: Record<string, string> = {
+  same_doctor_same_day:
+    "The patient already has an appointment with this doctor on this day. Choose another day or another doctor.",
+  max_upcoming: "The clinic limits how many upcoming appointments one patient can hold. Cancel one of theirs first, or ask an admin.",
+};
+
 function Step({ id, title, hint, children }: { id: string; title: string; hint?: string; children: React.ReactNode }) {
   return (
     <section aria-labelledby={id} className="space-y-4 rounded-xl border bg-card p-5 shadow-[var(--shadow-panel)]">
@@ -505,7 +512,7 @@ export function BookingFlow() {
           </div>
           {bookError && toApiError(bookError).code === "LIMIT_REACHED" ? (
             <p className="text-body-sm text-muted-foreground">
-              The clinic limits how many upcoming appointments one patient can hold. Cancel one of theirs first, or ask an admin.
+              {LIMIT_HINTS[String(toApiError(bookError).details.reason)] ?? LIMIT_HINTS.max_upcoming}
             </p>
           ) : null}
         </div>
