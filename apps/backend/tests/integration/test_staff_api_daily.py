@@ -172,7 +172,12 @@ async def test_schedule_shows_each_doctors_day_with_all_columns(
     [row] = doctor["appointments"]
     assert doctor["name"] == "Dr. Meera Iyer"
     assert (row["time_label"], row["status"], row["source"]) == ("9:30 AM", "booked", "bot")
-    assert row["patient"] == {"id": row["patient"]["id"], "full_name": "Asha Rao", "phone": "+12025550150"}
+    assert row["patient"] == {
+        "id": row["patient"]["id"],
+        "full_name": "Asha Rao",
+        "phone": "+12025550150",
+        "telegram": True,
+    }
     assert row["reminders"] == {"24h": "sent", "2h": None}
     assert row["patient_confirmed"] is True
     assert row["staff_attention"] is None
@@ -200,6 +205,33 @@ async def test_attention_panel_lists_tickets_alerts_and_flags(
         "unregistered",
     ]
     assert [f["staff_attention"]["reason"] for f in body["flagged"]] == ["reminder_failed"]
+
+
+async def test_the_schedule_says_which_patients_can_get_telegram_reminders(
+    settings: Settings, session_factory: Factory
+) -> None:
+    doctor_id, _, _ = await _clinic(session_factory)
+    walk_in = {
+        "doctor_id": doctor_id,
+        "start": at(8, 10).isoformat(),
+        "patient": {"full_name": "Ravi Kumar", "phone": "+1 202-555-0177", "verbal_consent": True},
+    }
+    async with api_client(settings, session_factory, lambda: NOW) as client:
+        csrf = await login(client, "riya")
+        booked = await client.post("/api/v1/appointments", json=walk_in, headers=csrf)
+        assert booked.status_code == 201, booked.text
+        days = [
+            (await client.get("/api/v1/schedule", params={"date": day})).json()
+            for day in ("2030-01-07", "2030-01-08")
+        ]
+    patients = {
+        a["patient"]["full_name"]: a["patient"]["telegram"]
+        for schedule in days
+        for doctor in schedule["doctors"]
+        for a in doctor["appointments"]
+    }
+    # Live finding 2026-11-05: a started walk-in without Telegram showed "24 h reminder not due yet".
+    assert patients == {"Asha Rao": True, "Ravi Kumar": False}
 
 
 async def test_a_refused_booking_names_the_limit_it_hit(settings: Settings, session_factory: Factory) -> None:

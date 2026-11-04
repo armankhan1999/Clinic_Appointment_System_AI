@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   AttentionPill,
   ConfirmedPill,
+  NoRemindersPill,
   ReminderPill,
   SourcePill,
   STATUS_EDGE,
@@ -103,12 +104,14 @@ export function AppointmentRow({ appointment, isAdmin }: { appointment: Appointm
           <SourcePill source={a.source} />
           {a.patient_confirmed ? <ConfirmedPill /> : null}
           {a.staff_attention ? <AttentionPill /> : null}
-          {!cancelled ? (
+          {cancelled ? null : a.patient.telegram === false ? (
+            <NoRemindersPill />
+          ) : (
             <>
               <ReminderPill window="24h" status={a.reminders["24h"]} />
               <ReminderPill window="2h" status={a.reminders["2h"]} />
             </>
-          ) : null}
+          )}
         </div>
         {a.staff_attention ? (
           <p className="text-body-sm text-status-attention">
