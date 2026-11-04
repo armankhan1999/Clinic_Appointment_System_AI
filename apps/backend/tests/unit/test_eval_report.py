@@ -35,7 +35,14 @@ def result(
         correct_tools=correct_tools,
         llm_calls=2,
         turns=[
-            Turn(said="Book Dr. Meera", replies=["Here are times"], buttons=[], tools=tools, seconds=seconds)
+            Turn(
+                said="Book Dr. Meera",
+                replies=["Here are times"],
+                buttons=[],
+                tools=tools,
+                seconds=seconds,
+                llm_seconds=seconds / 2,
+            )
         ],
     )
 
@@ -74,6 +81,7 @@ def test_report_shows_each_failure_with_conversation_tools_and_expectation() -> 
     assert "Book Dr. Meera" in text
     assert "Here are times" in text
     assert "check_availability" in text
+    assert "model 0.50 s" in text, "each failed turn shows how much time the model took"
     assert "one booking with Dr. Meera Iyer" in text
     assert "test-model" in text
     data = json.loads(to_json(summarise(results), results, META))

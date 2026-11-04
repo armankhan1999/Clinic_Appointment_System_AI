@@ -69,22 +69,30 @@ class CountingLLM:
     def __init__(self, inner: LLM) -> None:
         self._inner = inner
         self.calls = 0
+        self.seconds = 0.0
         self.errors: list[str] = []
 
     async def generate(
         self, *, system: str, transcript: Sequence[TranscriptItem], tools: Sequence[ToolSpec[Any]]
     ) -> LlmTurn:
         self.calls += 1
+        started = perf.perf_counter()
         try:
             return await self._inner.generate(system=system, transcript=transcript, tools=tools)
         except LlmUnavailableError as exc:
             status = getattr(exc.__cause__, "code", None)
             self.errors.append(f"{exc}" + (f" (HTTP {status})" if status else ""))
             raise
+        finally:
+            self.seconds += perf.perf_counter() - started
 
 
 def build_conversation(
-    settings: Settings, session_factory: Factory, clock: Callable[[], datetime], llm: LLM
+    settings: Settings,
+    session_factory: Factory,
+    clock: Callable[[], datetime],
+    llm: LLM,
+    budget_seconds: float,
 ) -> tuple[ConversationService, list[AuditEntry]]:
     audit: list[AuditEntry] = []
     write = db_audit_writer(session_factory)
@@ -98,7 +106,7 @@ def build_conversation(
         build_registry(),
         record,
         actor_id=settings.gemini_model,
-        budget_seconds=settings.llm_timeout_seconds,
+        budget_seconds=budget_seconds,
     )
     clinic_settings = ClinicSettingsService(session_factory)
     services = AgentServices(
@@ -135,7 +143,7 @@ class ScriptedPatient:
     last: list[Reply] = field(default_factory=list)
 
     async def _turn(self, said: str, send: Callable[[], Any]) -> None:
-        audit_mark, error_mark = len(self.audit), len(self.llm.errors)
+        audit_mark, error_mark, model_mark = len(self.audit), len(self.llm.errors), self.llm.seconds
         started = perf.perf_counter()
         replies: list[Reply] = await send()
         seconds = perf.perf_counter() - started
@@ -148,6 +156,7 @@ class ScriptedPatient:
                 tools=[e.action for e in self.audit[audit_mark:]],
                 seconds=round(seconds, 3),
                 errors=tuple(self.llm.errors[error_mark:]),
+                llm_seconds=round(self.llm.seconds - model_mark, 3),
             )
         )
 

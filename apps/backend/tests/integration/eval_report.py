@@ -37,6 +37,7 @@ class Turn:
     tools: list[str]
     seconds: float
     errors: tuple[str, ...] = ()
+    llm_seconds: float = 0.0  # time inside model calls; the rest is tools, database and audit
 
 
 @dataclass(frozen=True)
@@ -166,7 +167,10 @@ def render_markdown(summary: Summary, results: Sequence[ScenarioResult], meta: M
             lines += [f"  - Bot: {reply}" for reply in turn.replies]
             if turn.buttons:
                 lines.append(f"  - Buttons: {', '.join(turn.buttons)}")
-            lines.append(f"  - Tools: {', '.join(turn.tools) or '-'}; {turn.seconds:.2f} s")
+            lines.append(
+                f"  - Tools: {', '.join(turn.tools) or '-'}; {turn.seconds:.2f} s "
+                f"(model {turn.llm_seconds:.2f} s)"
+            )
             lines += [f"  - LLM error: {error}" for error in turn.errors]
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
