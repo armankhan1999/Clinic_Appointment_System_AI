@@ -140,3 +140,16 @@ def test_auth_secret_is_required_long_and_hidden() -> None:
     assert settings.auth_secret.get_secret_value() not in repr(settings)
     with pytest.raises(ValidationError, match="auth_secret"):
         make_settings(auth_secret="too-short")
+
+
+def test_env_example_lists_every_setting() -> None:
+    """E7-S1-AC2: every setting is documented in .env.example (set, or commented out with its default)."""
+    import re
+    from pathlib import Path
+
+    from clinic.config import REPO_ROOT_ENV
+
+    example = Path(REPO_ROOT_ENV).with_name(".env.example").read_text(encoding="utf-8")
+    listed = set(re.findall(r"^#?\s*([A-Z][A-Z0-9_]*)=", example, flags=re.MULTILINE))
+    missing = sorted(name.upper() for name in Settings.model_fields if name.upper() not in listed)
+    assert missing == []
