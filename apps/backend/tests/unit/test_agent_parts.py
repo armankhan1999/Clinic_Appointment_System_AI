@@ -1,15 +1,18 @@
 """Memory window, tool JSON schemas, system prompt (D-16) and the Gemini message mapping."""
 
+import asyncio
 import uuid
 from datetime import date, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pytest
 from google.genai import types
 from pydantic import SecretStr
 
 from clinic.agent.llm import (
     GeminiLLM,
+    LlmUnavailableError,
     ModelText,
     ModelTurn,
     ToolCall,
@@ -127,3 +130,22 @@ def test_schema_keeps_arguments_named_like_schema_keywords() -> None:
 async def test_gemini_client_can_be_closed_without_a_network_call() -> None:
     llm = GeminiLLM(SecretStr("not-a-real-key"), "gemini-3.5-flash-lite", 8.0)
     await llm.aclose()  # releases the HTTP client's sockets (no request is made)
+
+
+async def test_one_model_call_is_cut_off_at_the_per_call_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """E1-S1-AC3 with the split budget: a provider that never answers fails one call within its timeout.
+
+    Only the third-party SDK call is replaced; the timeout handling under test is GeminiLLM's own.
+    """
+    llm = GeminiLLM(SecretStr("not-a-real-key"), "gemini-3.5-flash-lite", 0.05)
+
+    async def never_answers(**_: object) -> None:
+        await asyncio.sleep(5)
+
+    monkeypatch.setattr(llm._client.aio.models, "generate_content", never_answers)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with pytest.raises(LlmUnavailableError):
+        await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
+    assert loop.time() - started < 1.0
+    await llm.aclose()

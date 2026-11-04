@@ -41,7 +41,7 @@ def build_bot_runtime(settings: Settings) -> BotRuntime:
         build_registry(),
         db_audit_writer(session_factory),
         actor_id=settings.gemini_model,
-        budget_seconds=settings.llm_timeout_seconds,
+        budget_seconds=settings.agent_turn_budget_seconds,  # each call is still capped by the LLM timeout
     )
     clinic_settings = ClinicSettingsService(session_factory)
     services = AgentServices(

@@ -71,6 +71,13 @@ def test_defaults() -> None:
     assert settings.db_schema == "clinic"
     assert settings.db_test_schema == "clinic_test"
     assert settings.llm_timeout_seconds == 8.0
+    assert settings.agent_turn_budget_seconds == 25.0
+
+
+def test_a_turn_budget_shorter_than_one_model_call_is_rejected() -> None:
+    """Each model call is capped at LLM_TIMEOUT_SECONDS; the whole turn must allow at least one call."""
+    with pytest.raises(ValidationError, match="AGENT_TURN_BUDGET_SECONDS"):
+        make_settings(llm_timeout_seconds=8.0, agent_turn_budget_seconds=5.0)
 
 
 def test_owner_password_key_is_never_loaded(monkeypatch: pytest.MonkeyPatch) -> None:
