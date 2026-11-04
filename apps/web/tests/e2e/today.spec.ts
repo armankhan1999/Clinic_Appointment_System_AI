@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./clean-browser";
 
 import { signIn } from "./support";
 
@@ -33,7 +33,10 @@ test.describe("Today (E6-S2)", () => {
   });
 
   test("attendance actions are disabled for appointments that have not started (E6-S5-AC2)", async ({ page }) => {
+    const loaded = page.waitForResponse((r) => r.url().includes("/api/v1/schedule?date=") && r.ok());
     await page.getByRole("button", { name: "Next day" }).click();
+    await loaded;
+    await expect(page.getByRole("status").filter({ hasText: "Loading the schedule" })).toHaveCount(0);
     const actions = page.getByRole("button", { name: /^Actions for / });
     test.skip((await actions.count()) === 0, "No appointments tomorrow in the seed data");
     await actions.first().click();
