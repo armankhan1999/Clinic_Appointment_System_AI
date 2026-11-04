@@ -143,7 +143,7 @@ describe("form schemas", () => {
       staff_hours_text: "9-5",
       timezone: "Asia/Kolkata",
       emergency_number: "112",
-      emergencyPhrasesText: "",
+      emergencyPhrasesText: "chest pain",
       cutoff_minutes: 120,
       booking_window_days: 30,
       max_upcoming_per_patient: 3,

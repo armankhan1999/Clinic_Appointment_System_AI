@@ -3,9 +3,10 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Save, TriangleAlert, Undo2 } from "lucide-react";
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useForm, useWatch, type FieldError as RhfFieldError } from "react-hook-form";
 
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageHeader } from "@/components/page-header";
 import { ErrorState, InlineError, LoadingState, RefetchNotice } from "@/components/states";
 import { useToast } from "@/components/toaster";
@@ -110,6 +111,9 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
     },
   });
 
+  // A time-zone change moves every slot and appointment label, so it is confirmed separately.
+  const [timezoneChange, setTimezoneChange] = useState<Partial<ClinicSettings> | null>(null);
+
   const e = form.formState.errors;
   const { isDirty } = form.formState;
   const onSubmit = form.handleSubmit((values) => {
@@ -118,11 +122,40 @@ function SettingsEditor({ settings }: { settings: ClinicSettings }) {
       form.reset(original);
       return;
     }
+    if (changes.timezone !== undefined) {
+      setTimezoneChange(changes);
+      return;
+    }
     save.mutate(changes);
   });
 
   return (
     <form noValidate onSubmit={onSubmit} className="space-y-4">
+      <ConfirmDialog
+        open={timezoneChange !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTimezoneChange(null);
+            save.reset();
+          }
+        }}
+        title={`Change the clinic time zone to ${timezoneChange?.timezone ?? ""}?`}
+        description={
+          <>
+            <p>
+              Free slots will be worked out in the new time zone. Existing appointments are stored as a moment in time and keep
+              it, so the times shown for them will change.
+            </p>
+            <p>Only do this if the clinic&apos;s location really changed.</p>
+          </>
+        }
+        confirmLabel="Change time zone"
+        cancelLabel={`Keep ${original.timezone}`}
+        destructive
+        pending={save.isPending}
+        error={save.error}
+        onConfirm={() => (timezoneChange ? save.mutate(timezoneChange, { onSuccess: () => setTimezoneChange(null) }) : undefined)}
+      />
       <div className="rounded-xl border bg-card">
         <Group title="Clinic details" description="Shown to patients by the Telegram assistant.">
           <Row id="clinic_name" label="Clinic name" error={e.clinic_name}>
