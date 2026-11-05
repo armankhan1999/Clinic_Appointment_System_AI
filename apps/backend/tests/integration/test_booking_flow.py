@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from clinic.agent.llm import ToolResults
+from clinic.agent.llm import LlmUnavailableError, ToolResults
 from clinic.agent.loop import AgentLoop, AuditEntry
 from clinic.agent.memory import ConversationMemory
 from clinic.agent.tools import build_registry
@@ -90,6 +90,26 @@ async def test_booking_request_shows_a_summary_and_writes_nothing(session_factor
     tool_results = [item for t in llm.transcripts for item in t if isinstance(item, ToolResults)]
     assert tool_results[0].results[0][1].code == ResultCode.PENDING_CONFIRMATION
     assert "Asha" not in repr(llm.transcripts), "the patient name is rendered by code, not sent to the LLM"
+
+
+async def test_a_staged_booking_is_still_shown_when_the_model_fails_to_word_the_reply(
+    session_factory: Factory,
+) -> None:
+    # Live 2026-11-05: a tool staged a reschedule, then Gemini ran out of time before the reply, so the
+    # patient only saw "can't answer right now". The summary is rendered by code and needs no model.
+    doctor, _ = await _setup(session_factory)
+    llm = ScriptedLLM(
+        call_turn(("book_appointment", {"doctor_id": str(doctor.id), "slot_start": SLOT})),
+        LlmUnavailableError("ServerError"),
+    )
+    service = build(session_factory, llm)
+    replies = await service.handle_text(USER, "book Wednesday 9:30")
+    assert not any("can't answer" in r.text for r in replies)
+    summary = next(r for r in replies if r.inline_buttons)
+    assert "9:30 AM" in summary.text
+    [done] = await service.handle_callback(USER, _buttons([summary])["Confirm"])
+    assert done.text.startswith("Booked!")
+    assert len(await _appointments(session_factory)) == 1
 
 
 async def test_confirm_books_for_the_session_patient_and_shows_the_reference(

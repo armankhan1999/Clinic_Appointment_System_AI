@@ -157,7 +157,13 @@ class ConversationService:
             return [*replies, self._help(view)]
         staged_before = self._pending.peek(user.telegram_user_id)
         outcome = await self._run_agent(patient, stripped, view)
-        replies.append(self._outcome_reply(outcome, view))
+        staged = self._pending.peek(user.telegram_user_id)
+        staged_summary = (
+            summary(staged, patient) if staged is not None and staged is not staged_before else None
+        )
+        # A staged action is complete without the model's wording: show its summary rather than a fallback.
+        if outcome.stopped == "reply" or staged_summary is None:
+            replies.append(self._outcome_reply(outcome, view))
         if self._failed_repeatedly(user.telegram_user_id, outcome):
             replies.append(
                 Reply(
@@ -165,11 +171,8 @@ class ConversationService:
                     inline_buttons=((Button("Talk to staff", callback(HANDOFF, "agent_failed")),),),
                 )
             )
-        staged = self._pending.peek(user.telegram_user_id)
-        if outcome.stopped == "reply" and staged is not None and staged is not staged_before:
-            staged_summary = summary(staged, patient)
-            if staged_summary is not None:
-                replies.append(staged_summary)
+        if staged_summary is not None:
+            replies.append(staged_summary)
         return replies
 
     def _failed_repeatedly(self, user_id: int, outcome: AgentOutcome) -> bool:
