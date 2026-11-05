@@ -7,7 +7,7 @@ from telegram import InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRem
 from telegram.constants import ChatType
 from telegram.error import NetworkError
 
-from clinic.bot.telegram_app import keep_typing, serves_chat, to_markup
+from clinic.bot.telegram_app import Sender, keep_typing, serves_chat, to_markup
 from clinic.domain.messages import Button, Reply
 
 
@@ -140,7 +140,7 @@ async def test_a_failing_typing_status_never_blocks_the_reply() -> None:
     assert attempts >= 2, "a failed status update is logged and retried, never propagated"
 
 
-def _flaky_sender(*failures: Exception) -> tuple[list[str], object]:
+def _flaky_sender(*failures: Exception) -> tuple[list[str], Sender]:
     """A send function that raises the given errors first, then succeeds; records successful texts."""
     queued = list(failures)
     delivered: list[str] = []
