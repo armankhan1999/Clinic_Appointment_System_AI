@@ -1,5 +1,6 @@
 """Transport-agnostic outgoing message model, shared by the bot adapter, conversation and workers."""
 
+import re
 from dataclasses import dataclass
 
 CALLBACK_PREFIX = "v1"
@@ -32,3 +33,11 @@ class Reply:
 
 def callback(kind: str, value: str) -> str:
     return f"{CALLBACK_PREFIX}:{kind}:{value}"
+
+
+_EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1", re.DOTALL)
+
+
+def plain_text(text: str) -> str:
+    """Drop Markdown bold markers from model text: replies are sent as plain text, so they would show raw."""
+    return _EMPHASIS.sub(r"\2", text)

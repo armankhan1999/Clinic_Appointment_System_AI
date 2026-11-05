@@ -197,3 +197,13 @@ async def test_one_model_call_is_cut_off_at_the_per_call_timeout(monkeypatch: py
         await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
     assert loop.time() - started < 1.0
     await llm.aclose()
+
+
+def test_model_markdown_emphasis_is_removed_because_telegram_shows_it_raw() -> None:
+    # Live 2026-11-05: replies are plain text, so "**Confirm cancel**" reached the patient with asterisks.
+    from clinic.agent.loop import AgentOutcome
+    from clinic.conversation.service import ConversationService
+
+    outcome = AgentOutcome("Please tap **Confirm cancel** below, or __Keep it__. 2 * 3 stays.", "reply", 1)
+    reply = ConversationService._outcome_reply(outcome, VIEW)
+    assert reply.text == "Please tap Confirm cancel below, or Keep it. 2 * 3 stays."

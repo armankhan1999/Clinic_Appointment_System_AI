@@ -21,7 +21,7 @@ from clinic.agent.rate_limit import RateLimiter
 from clinic.agent.tools import AgentServices, ToolContext
 from clinic.conversation import registration as reg
 from clinic.conversation.appointment_actions import CHANGE, CONFIRM, PICK, AppointmentActions, summary
-from clinic.domain.messages import Button, IncomingUser, Reply, callback
+from clinic.domain.messages import Button, IncomingUser, Reply, callback, plain_text
 from clinic.domain.patients import InvalidNameError, InvalidPhoneError, normalise_name, normalise_phone
 from clinic.domain.results import ResultCode
 from clinic.domain.slots import format_date_long, format_time_12h
@@ -454,7 +454,7 @@ class ConversationService:
     @staticmethod
     def _outcome_reply(outcome: AgentOutcome, view: ClinicSettingsView) -> Reply:
         if outcome.stopped == "reply" and outcome.text:
-            return Reply(outcome.text)
+            return Reply(plain_text(outcome.text))
         if outcome.stopped == "ungrounded":
             return Reply(
                 "Sorry, I couldn't confirm that information. Please ask me again, "
