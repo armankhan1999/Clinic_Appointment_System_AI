@@ -15,7 +15,7 @@ from telegram import (
     Update,
 )
 from telegram.constants import ChatAction, ChatType
-from telegram.error import BadRequest, TelegramError
+from telegram.error import BadRequest, NetworkError, TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -119,10 +119,23 @@ class UserLocks:
 type Sender = Callable[..., Coroutine[Any, Any, object]]
 
 
-async def _send(send: Sender, reply: Reply) -> None:
+async def _send(send: Sender, reply: Reply, *, retry_delay: float = 1.0) -> None:
+    """Send one reply; a network failure (not a malformed request) gets one more try.
+
+    A reply can follow up to a minute of work, so losing it to one network blip is worse than the rare
+    duplicate when the first attempt did reach Telegram but its answer timed out.
+    """
     chunks = split_message(reply.text)
     for index, chunk in enumerate(chunks):
-        await send(chunk, reply_markup=to_markup(reply) if index == len(chunks) - 1 else None)
+        markup = to_markup(reply) if index == len(chunks) - 1 else None
+        try:
+            await send(chunk, reply_markup=markup)
+        except BadRequest:
+            raise
+        except NetworkError as exc:
+            log.warning("reply_send_retry", error=type(exc).__name__)
+            await asyncio.sleep(retry_delay)
+            await send(chunk, reply_markup=markup)
 
 
 class _SendsMessages(Protocol):

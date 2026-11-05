@@ -138,3 +138,50 @@ async def test_a_failing_typing_status_never_blocks_the_reply() -> None:
     async with keep_typing(send, interval=0.01):  # must not raise into the reply path
         await asyncio.sleep(0.05)
     assert attempts >= 2, "a failed status update is logged and retried, never propagated"
+
+
+def _flaky_sender(*failures: Exception) -> tuple[list[str], object]:
+    """A send function that raises the given errors first, then succeeds; records successful texts."""
+    queued = list(failures)
+    delivered: list[str] = []
+
+    async def send(text: str, reply_markup: object = None) -> object:
+        if queued:
+            raise queued.pop(0)
+        delivered.append(text)
+        return None
+
+    return delivered, send
+
+
+async def test_a_reply_lost_to_a_telegram_timeout_is_sent_again_once() -> None:
+    # Live 2026-11-05: send_message timed out once and the patient never got the answer.
+    from telegram.error import TimedOut
+
+    from clinic.bot.telegram_app import _send
+
+    delivered, send = _flaky_sender(TimedOut())
+    await _send(send, Reply("Please see a doctor."), retry_delay=0)
+    assert delivered == ["Please see a doctor."]
+
+
+async def test_a_bad_request_is_not_sent_again() -> None:
+    from telegram.error import BadRequest
+
+    from clinic.bot.telegram_app import _send
+
+    delivered, send = _flaky_sender(BadRequest("message is malformed"))
+    with pytest.raises(BadRequest):
+        await _send(send, Reply("text"), retry_delay=0)
+    assert delivered == []
+
+
+async def test_a_reply_is_given_up_after_a_second_timeout() -> None:
+    from telegram.error import TimedOut
+
+    from clinic.bot.telegram_app import _send
+
+    delivered, send = _flaky_sender(TimedOut(), TimedOut())
+    with pytest.raises(TimedOut):
+        await _send(send, Reply("text"), retry_delay=0)
+    assert delivered == []
