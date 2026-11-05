@@ -76,3 +76,6 @@ Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (Q
 - Defects found live and fixed test-first, merged to main with green CI: D-43 booking-limit reason, D-44 taken username 409, D-45 password-reset control, D-46 dialogs scroll on short screens, D-47 "No reminders: not on Telegram", leave checkbox wording.
 - Doc alignment pass merged (requirements, architecture, API, security, design, READMEs).
 - Mistake: the Playwright tool echoed one login snippet, exposing the e2e_desk test password in the session log; it is rotated after the E2E agent finishes. Later logins used a one-shot localhost credential server instead.
+- E2E agent merged (3ac40a1): every staff-dashboard feature now has a Playwright spec (54 tests, desktop + tablet), patient-side fixtures with a marked clean-up, leave reason required (D-49). Its report led to D-48 (API keep-alive).
+- Verified on merged main: WEB-UNIT-05 127/0, BE-UNIT-05 237/0, M6-FULL-05 424/0, KEEPALIVE-01; e2e_desk password rotated (ROT-01).
+- Left for Arman to decide: 19 "Playwright Walkin" patients from older booking-spec runs remain in the dev database (`tests/e2e_support/cleanup.py --patient <id>` removes marked rows only).
