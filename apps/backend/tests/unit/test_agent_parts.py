@@ -6,6 +6,7 @@ from datetime import date, time
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
 import pytest
 from google.genai import types
 from pydantic import SecretStr
@@ -130,6 +131,53 @@ def test_schema_keeps_arguments_named_like_schema_keywords() -> None:
 async def test_gemini_client_can_be_closed_without_a_network_call() -> None:
     llm = GeminiLLM(SecretStr("not-a-real-key"), "gemini-3.5-flash-lite", 8.0)
     await llm.aclose()  # releases the HTTP client's sockets (no request is made)
+
+
+def _gemini_with_responses(statuses: list[int]) -> tuple[GeminiLLM, list[int], httpx.AsyncClient]:
+    """A real GeminiLLM whose HTTP layer answers with the given statuses in order (no network)."""
+    seen: list[int] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        status = statuses[min(len(seen), len(statuses) - 1)]
+        seen.append(status)
+        if status == 200:
+            body = {
+                "candidates": [
+                    {"content": {"role": "model", "parts": [{"text": "OK"}]}, "finishReason": "STOP"}
+                ]
+            }
+            return httpx.Response(200, json=body)
+        return httpx.Response(
+            status, json={"error": {"code": status, "message": "provider error", "status": "X"}}
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    llm = GeminiLLM(SecretStr("not-a-real-key"), "gemini-3.5-flash-lite", 8.0, http_client=client)
+    return llm, seen, client
+
+
+async def test_a_temporary_provider_error_is_retried_once() -> None:
+    # Live 2026-11-05: Gemini answered 503 twice in four minutes and each turn fell back to "can't answer".
+    llm, seen, client = _gemini_with_responses([503, 200])
+    turn = await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
+    assert (turn.text, seen) == ("OK", [503, 200])
+    await client.aclose()
+
+
+async def test_quota_errors_are_not_retried() -> None:
+    llm, seen, client = _gemini_with_responses([429, 200])
+    with pytest.raises(LlmUnavailableError):
+        await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
+    assert seen == [429], "a used-up daily quota does not recover within the call budget"
+    await client.aclose()
+
+
+async def test_a_provider_that_stays_down_is_given_up_after_one_retry() -> None:
+    llm, seen, client = _gemini_with_responses([503, 503, 503])
+    with pytest.raises(LlmUnavailableError):
+        await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
+    assert seen == [503, 503]
+    await client.aclose()
 
 
 async def test_one_model_call_is_cut_off_at_the_per_call_timeout(monkeypatch: pytest.MonkeyPatch) -> None:

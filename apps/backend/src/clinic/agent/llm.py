@@ -24,6 +24,12 @@ if TYPE_CHECKING:
 
 log = structlog.get_logger(__name__)
 
+# One quick retry for provider-side hiccups (5xx), inside the per-call timeout. 429 is left out on purpose:
+# on the free tier it means the daily quota is used up, which no retry within seconds can fix.
+TRANSIENT_RETRY = types.HttpRetryOptions(
+    attempts=2, initial_delay=0.5, max_delay=1.0, jitter=0.25, http_status_codes=[500, 502, 503, 504]
+)
+
 
 class LlmUnavailableError(Exception):
     """The model could not produce a usable turn (outage, timeout, quota, blocked or empty response)."""
@@ -109,8 +115,18 @@ def to_gemini_contents(transcript: Sequence[TranscriptItem]) -> list[types.Conte
 
 
 class GeminiLLM:
-    def __init__(self, api_key: SecretStr, model: str, timeout_s: float) -> None:
-        self._client = genai.Client(api_key=api_key.get_secret_value())
+    def __init__(
+        self,
+        api_key: SecretStr,
+        model: str,
+        timeout_s: float,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        self._client = genai.Client(
+            api_key=api_key.get_secret_value(),
+            http_options=types.HttpOptions(retry_options=TRANSIENT_RETRY, httpx_async_client=http_client),
+        )
         self._model = model
         self._timeout_s = timeout_s
 
