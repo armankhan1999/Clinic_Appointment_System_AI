@@ -39,7 +39,7 @@ Status values: NOT_STARTED · ANALYSIS · READY · IN_PROGRESS · CODE_COMPLETE 
 |---|---|---|---|
 | DEC-RT | Reply time: option A done (D-34, 8 s per call / 25 s per turn + typing status) removed all turn-budget failures; the remaining 14/35 are single free-tier model calls over 8 s (AEV-PROD-02). Next lever: faster or paid model tier (option C); co-location (B) for the 3.9 s of database time | Arman | 2026-11-04 |
 | BLK-05 | Download the Supabase CA certificate to `infrastructure/db/prod-ca-2021.crt`, set `DB_SSL_ROOT_CERT`, compare its SHA-256 with `80:70:25:AD:…:72:E6:CA:FA` | Arman | 2026-11-03 |
-| BLK-06 | Telegram tap-through: registration, reminders, buttons and notices done live 2026-11-05 (LIVE-TG-01); booking by chat waits for the Gemini quota | Claude / Arman | 2026-11-03 |
+| ~~BLK-06~~ | Closed 2026-11-05: every patient flow used live in Telegram (LIVE-TG-01, LIVE-TG-02) | — | 2026-11-03 |
 | SEC-ROT | Rotate the database password, Gemini key and bot token that were shared in chat | Arman | 2026-11-03 |
 | D-33 | ~~`cn@0.5.2`~~ Resolved: replaced by `clsx` 2.1.1 + `tailwind-merge` 3.7.0 | — | 2026-11-04 |
 | PR-1 | Review and merge PR #1 (`feat/m6-quality-e2e` → `main`); CI green on the PR | Arman | 2026-11-04 |
@@ -79,3 +79,10 @@ Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (Q
 - E2E agent merged (3ac40a1): every staff-dashboard feature now has a Playwright spec (54 tests, desktop + tablet), patient-side fixtures with a marked clean-up, leave reason required (D-49). Its report led to D-48 (API keep-alive).
 - Verified on merged main: WEB-UNIT-05 127/0, BE-UNIT-05 237/0, M6-FULL-05 424/0, KEEPALIVE-01; e2e_desk password rotated (ROT-01).
 - Left for Arman to decide: 19 "Playwright Walkin" patients from older booking-spec runs remain in the dev database (`tests/e2e_support/cleanup.py --patient <id>` removes marked rows only).
+
+## Session log — 2026-11-05 (evening, AI chat live)
+
+- WEB-E2E-06: the full dashboard suite passed 54/54 on the live :3100 stack (an earlier attempt was invalidated by the PC sleeping; its leftover schedule block was reverted). Marked test rows deleted with the clean-up script (19 patients, 1 doctor), as approved.
+- LIVE-TG-02: all AI-driven patient flows passed live, ending with /deletemydata (Arman's data anonymised). Fixes D-50..D-53 merged with tests. Diagnostic budgets 15/45 were used for part of the run and removed afterwards (production 8/25 confirmed).
+- For Arman to decide: the seed FAQ says the clinic is open until 7 PM, but `staff_hours_text` says 6 PM; the bot used both in the same chat. Pick one and edit it under Clinic answers or Clinic settings.
+- Watch: the PC enters Modern Standby when idle, which stops long runs and breaks database connections until they reconnect (the stack recovered by itself within ≈15 s after each wake).

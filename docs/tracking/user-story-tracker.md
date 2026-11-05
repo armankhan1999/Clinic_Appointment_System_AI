@@ -46,13 +46,13 @@ Statuses above are unchanged; this adds live evidence (LIVE-TG-01 Telegram, LIVE
 | Story | Live result |
 |---|---|
 | E1-S1, E1-S2, E1-S3 | PASS: consent, decline stores nothing, registration with shared contact |
-| E1-S4 | PARTIAL: prompt and Keep path PASS; the final deletion is run after the AI tests |
-| E2-S1..S4, E3-S1, E3-S2 (by chat) | DEFERRED: Gemini quota; booking rules verified through the dashboard (same service) |
-| E3-S3 | PASS through the reminder Cancel button (summary, Confirm cancel, audit) |
+| E1-S4 | PASS: prompt, Keep, and the final deletion (name replaced, phone and Telegram id cleared, upcoming booking cancelled, audit) |
+| E2-S1..S3, E3-S1, E3-S2 (by chat) | PASS (LIVE-TG-02): slots offered, summary + Confirm, list, reschedule with From/To; some turns needed the diagnostic budgets (Gemini latency) |
+| E3-S3 | PASS through the reminder Cancel button and by chat (summary, Confirm cancel, audit) |
 | E4-S1, E4-S2, E4-S3, E4-S4 | PASS: both reminders, all three buttons, leave and staff-cancel notices with reason and Reschedule |
-| E5-S1, E5-S2, E5-S4 | DEFERRED: need the model |
+| E5-S1, E5-S2, E5-S4 | PASS (LIVE-TG-02): grounded clinic answer, medical advice refused, handoff ticket resolved by the receptionist |
 | E5-S3 | PASS: 112 reply, alert on the dashboard, acknowledged with audit |
 | E6-S1..S6 | PASS: roles, Today, leave, booking and cancel, attendance, weekly numbers (fixes D-43, D-46, D-47) |
 | E7-S2 | PASS: activity log for admins, denied to receptionists |
 | E7-S3 | PASS: rate limit on the 22nd message, 1,000-character limit |
-| E7-S4 | DEFERRED: needs the model |
+| E7-S4 | PASS (LIVE-TG-02): "ignore instructions / admin mode" refused; database unchanged |

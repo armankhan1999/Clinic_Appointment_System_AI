@@ -134,12 +134,12 @@ Every persona was exercised on the running stack (dev mode) with real Telegram a
 
 | Persona | Channel | Verified live | Deferred |
 |---|---|---|---|
-| Patient | Telegram (Arman's account, @clinic_dev_project_bot) | consent and decline, registration, emergency reply and alert, fallback, message length and rate limits, 24 h and 2 h reminders, Confirm / Cancel / Reschedule buttons, clinic-cancel and leave notices with reason, /deletemydata prompt and Keep, /start and /help (LIVE-TG-01) | booking, listing and rescheduling by chat; FAQ; medical refusal; handoff; injection checks; the final /deletemydata |
+| Patient | Telegram (Arman's account, @clinic_dev_project_bot) | consent and decline, registration, emergency reply and alert, fallback, message length and rate limits, 24 h and 2 h reminders, Confirm / Cancel / Reschedule buttons, clinic-cancel and leave notices with reason, /deletemydata prompt and Keep, /start and /help (LIVE-TG-01); FAQ, booking, listing, rescheduling and cancelling by chat, medical refusal, prompt-injection refusal, handoff, and the final /deletemydata with anonymisation checked in the database (LIVE-TG-02) | — (several AI turns needed the diagnostic 15/45 budgets: Gemini was at 6–7 s per call, see NFR-01) |
 | Receptionist | Dashboard (Playwright Chromium) | Today page and reminder states, alert acknowledgement, booking (existing and walk-in with verbal consent), limit refusals, staff cancel with reason, attendance completed / no-show, admin pages and admin API denied (LIVE-DASH-01) | — |
 | Clinic admin | Dashboard (Playwright Chromium) | add doctor, weekly hours, leave with affected-bookings preview and confirmation, staff accounts (create, taken username, password reset), activity log, weekly numbers, CSRF refusal (LIVE-DASH-01) | — |
 | Doctor | No login (GAP-11) | needs met through the admin's hours and leave screens and the E4-S4 notices (verified above) | — |
 
-Defects found live and fixed test-first the same morning: D-43 (booking-limit hint), D-44 (taken username gave 500), D-45 (no password-reset control), D-46 (dialogs cut off on short screens), D-47 ("not due yet" for patients without Telegram), plus singular wording on the leave checkbox (d2d8e1c).
+Evening (LIVE-TG-02) fixes: D-50 Gemini 5xx retried once, D-51 staged summary shown when the model fails, D-52 reply send retried once, D-53 Markdown bold stripped. Defects found live and fixed test-first the same morning: D-43 (booking-limit hint), D-44 (taken username gave 500), D-45 (no password-reset control), D-46 (dialogs cut off on short screens), D-47 ("not due yet" for patients without Telegram), plus singular wording on the leave checkbox (d2d8e1c).
 
 ## Non-functional requirements
 
@@ -165,7 +165,7 @@ Defects found live and fixed test-first the same morning: D-43 (booking-limit hi
 | Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate Google Cloud project for evaluations (limits are per project, not per key), or a paid tier | Arman |
 | Run the final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets | Claude / Arman |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
-| BLK-06: registration, reminders, buttons and notices were tapped through live on 2026-11-05 (LIVE-TG-01); booking and managing appointments by chat still need the Gemini quota, then the final /deletemydata | Claude / Arman |
+| ~~BLK-06~~ Done: every patient flow was used live in Telegram on 2026-11-05 (LIVE-TG-01, LIVE-TG-02), ending with /deletemydata and a database check | — |
 | Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |
 | Review and merge PR #1 (CI green: backend 414 passed, web 116 passed, audits clean) | Arman |
 | Security residual risks: [`../security/security-review.md`](../security/security-review.md) | — |
