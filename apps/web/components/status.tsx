@@ -1,4 +1,5 @@
 import {
+  BellOff,
   BellRing,
   CalendarClock,
   CheckCheck,
@@ -100,6 +101,15 @@ export function ReminderPill({ window, status }: { window: "24h" | "2h"; status:
       <span>
         {window === "24h" ? "24 h" : "2 h"} reminder {r.label}
       </span>
+    </Pill>
+  );
+}
+
+/** Reminders go only through Telegram; a patient without it hears from the clinic by phone. */
+export function NoRemindersPill() {
+  return (
+    <Pill tone="neutral" icon={BellOff} className="font-normal">
+      No reminders: not on Telegram
     </Pill>
   );
 }

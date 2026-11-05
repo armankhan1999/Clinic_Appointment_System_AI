@@ -18,7 +18,7 @@ Not met or not done yet (details in the [acceptance report](docs/testing/accepta
 
 - **Reply time (NFR-01, ≤ 5 s for 95% of messages) is not met** on the dev PC: in the recorded runs the free-tier model alone took a median of 5.5–8.0 s per turn.
 - **The evaluation targets of §3.9 are met only with a 45 s diagnostic budget** (35/35, AEV-DIAG-03); at the production settings the last complete run passed 19/35 (AEV-PROD-02), every failure being a model call over 8 s. The final run of all 38 scenarios at production settings has not produced results: it was stopped twice by the Gemini free-tier quota (500 requests per day, shared with the bot).
-- Verified database TLS needs the Supabase CA certificate, which is not yet installed on the dev PC (BLK-05); a person has not yet tapped through registration, booking and reminders in Telegram (BLK-06).
+- Verified database TLS needs the Supabase CA certificate, which is not yet installed on the dev PC (BLK-05); registration, reminders, buttons and clinic notices were tapped through live in Telegram on 2026-11-05; booking and managing appointments by chat wait for the Gemini quota (BLK-06, partly done).
 - No cloud deployment, backup/restore procedure or privacy assessment exists.
 
 ## Prerequisites

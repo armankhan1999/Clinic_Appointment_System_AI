@@ -128,6 +128,19 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
   tier allows only **20 requests per day** (QUOTA-02); the probes and the first evaluation calls used them up. Both
   models reset at midnight Pacific time (13:30 IST). Free-tier limits per model are shown only in AI Studio.
 
+## Live persona tests (2026-11-05)
+
+Every persona was exercised on the running stack (dev mode) with real Telegram and a real browser. Free-text replies were the fallback all morning because the Gemini daily quota was used up, so the AI-driven flows are listed as deferred, not passed.
+
+| Persona | Channel | Verified live | Deferred |
+|---|---|---|---|
+| Patient | Telegram (Arman's account, @clinic_dev_project_bot) | consent and decline, registration, emergency reply and alert, fallback, message length and rate limits, 24 h and 2 h reminders, Confirm / Cancel / Reschedule buttons, clinic-cancel and leave notices with reason, /deletemydata prompt and Keep, /start and /help (LIVE-TG-01) | booking, listing and rescheduling by chat; FAQ; medical refusal; handoff; injection checks; the final /deletemydata |
+| Receptionist | Dashboard (Playwright Chromium) | Today page and reminder states, alert acknowledgement, booking (existing and walk-in with verbal consent), limit refusals, staff cancel with reason, attendance completed / no-show, admin pages and admin API denied (LIVE-DASH-01) | — |
+| Clinic admin | Dashboard (Playwright Chromium) | add doctor, weekly hours, leave with affected-bookings preview and confirmation, staff accounts (create, taken username, password reset), activity log, weekly numbers, CSRF refusal (LIVE-DASH-01) | — |
+| Doctor | No login (GAP-11) | needs met through the admin's hours and leave screens and the E4-S4 notices (verified above) | — |
+
+Defects found live and fixed test-first the same morning: D-43 (booking-limit hint), D-44 (taken username gave 500), D-45 (no password-reset control), D-46 (dialogs cut off on short screens), D-47 ("not due yet" for patients without Telegram), plus singular wording on the leave checkbox (d2d8e1c).
+
 ## Non-functional requirements
 
 | NFR | Status | Evidence |
@@ -140,7 +153,7 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
 | NFR-06 data minimisation | Met | `test_patients_store_only_identity_consent_and_bookkeeping` |
 | NFR-07 chat history in memory only, last 20 messages | Met | `test_memory_keeps_the_last_ten_exchanges_per_user`, `test_memory_forgets_an_idle_conversation` |
 | NFR-08 rate limit, 1,000-character limit | Met | test_rate_limit.py, test_m4_conversation.py |
-| NFR-09 tap buttons for confirmations and reminders | Met (automated); **Telegram tap-through by a person not done (BLK-06)** | conversation and reminder tests |
+| NFR-09 tap buttons for confirmations and reminders | Met: automated, and tapped live in Telegram on 2026-11-05 (LIVE-TG-01: reminder Confirm, Cancel → Confirm cancel, Reschedule, Keep my data) | conversation and reminder tests; LIVE-TG-01 |
 | NFR-10 tests and evaluation suite | Met | this report |
 | NFR-11 JSON logs with a request id per message | Met | test_observability.py, `test_each_message_gets_its_own_request_id_shared_by_its_tool_calls` |
 
@@ -152,7 +165,7 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
 | Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate Google Cloud project for evaluations (limits are per project, not per key), or a paid tier | Arman |
 | Run the final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets | Claude / Arman |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
-| BLK-06: a person taps through registration, booking and reminders in Telegram | Arman |
+| BLK-06: registration, reminders, buttons and notices were tapped through live on 2026-11-05 (LIVE-TG-01); booking and managing appointments by chat still need the Gemini quota, then the final /deletemydata | Claude / Arman |
 | Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |
 | Review and merge PR #1 (CI green: backend 414 passed, web 116 passed, audits clean) | Arman |
 | Security residual risks: [`../security/security-review.md`](../security/security-review.md) | — |

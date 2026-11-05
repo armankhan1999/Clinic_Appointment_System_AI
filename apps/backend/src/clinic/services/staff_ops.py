@@ -50,6 +50,7 @@ class PatientRefOut:
     id: UUID
     full_name: str
     phone: str | None
+    telegram: bool  # reminders and clinic notices go only to patients linked to Telegram
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,12 @@ class NewPatient:
 
 
 def _patient_ref(patient: Patient) -> PatientRefOut:
-    return PatientRefOut(patient.id, patient.full_name or "Deleted patient", patient.phone)
+    return PatientRefOut(
+        id=patient.id,
+        full_name=patient.full_name or "Deleted patient",
+        phone=patient.phone,
+        telegram=patient.telegram_user_id is not None,
+    )
 
 
 async def appointment_rows(

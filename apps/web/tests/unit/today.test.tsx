@@ -109,6 +109,14 @@ describe("AppointmentRow", () => {
     }
   });
 
+  it("says a patient without Telegram gets no reminders instead of 'not due yet'", () => {
+    // Live finding 2026-11-05: a started walk-in appointment read "24 h reminder not due yet".
+    row({ source: "staff", patient: { id: "p-2", full_name: "Walk In", phone: "+1 202-555-0191", telegram: false }, reminders: { "24h": null, "2h": null } });
+    const text = screen.getByRole("listitem").textContent ?? "";
+    expect(text).toContain("No reminders: not on Telegram");
+    expect(text).not.toContain("not due yet");
+  });
+
   it("shows the staff-attention flag and reason", () => {
     row({ staff_attention: { reason: "notification_failed", at: "2030-01-09T04:00:00Z" } });
     expect(screen.getByRole("listitem").textContent).toContain("Needs a call");

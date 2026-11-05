@@ -36,6 +36,8 @@ export const patientRefSchema = z.object({
   id: z.string(),
   full_name: z.string(),
   phone: z.string().nullable(),
+  /** Linked to Telegram, so reminders and clinic notices can reach them. */
+  telegram: z.boolean().optional(),
 });
 export type PatientRef = z.infer<typeof patientRefSchema>;
 

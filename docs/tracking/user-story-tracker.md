@@ -38,3 +38,21 @@ Status as of 2026-11-04, evening (third update). Runs cited: M6-FULL-03 (backend
 | E7-S4 | Prompt injection resilience | Should (P1) | 3 | 6 | Security + QA engineer | E2-S3, E3-S1 | —; L807 | AC1, AC2, AC3 | COMPLETED | AC1–AC3 PASS | agent/loop.py (patient_id from session), agent/tools.py (patient-scoped queries, FAQ as data, staged writes), services/booking.py (limits), agent/pending.py; PI-01..04 (all runs); tests/unit/test_agent_loop.py, test_pending.py, tests/integration/test_manage_appointments.py, test_manage_flow.py, test_booking.py, test_booking_flow.py, test_m4_conversation.py (M6-FULL-03) | 2026-11-04 | — |
 | E7-S5 | Agent evaluation suite | Must (P0) | 5 | 6 | QA automation + AI agent engineer | E2 to E5 P0 stories | —; L821 | AC1, AC2, AC3 | COMPLETED | AC1–AC3 PASS | tests/integration/test_agent_eval.py, eval_scenarios.py (38 scenarios: the 35 of §3.9 + XA-01..03), eval_harness.py, eval_report.py; tests/unit/test_eval_report.py (M6-FULL-03); AEV-DIAG-03, AEV-PROD-01, AEV-PROD-02; docs/testing/acceptance-report.md | 2026-11-04 | AC3: all 7 targets met with the diagnostic budget; at production settings 14/35 (AEV-PROD-01) and 19/35 (AEV-PROD-02) genuine (D-36 recount), explained in acceptance-report. Not yet done: a clean production-settings run of the 38-scenario suite with EVAL_RUNS=2 (AEV-PROD-03 invalid). The 38-scenario assertion in test_eval_report.py (9c772bf) is not yet in a regression run |
 | E7-S6 | Demo packaging | Should (P1) | 2 | 6 | DevOps / platform engineer | E7-S1 | —; L835 | AC1, AC2 | COMPLETED | AC1, AC2 PASS | repo: scripts/start.ps1, scripts/stop.ps1; agent/llm.py per-call timeout, agent/loop.py budget, conversation/service.py fallback; START-01 (23.5 s), START-02 (24.0 s, fresh build), FRESH-02 (52.7 s); tests/unit/test_agent_parts.py, tests/integration/test_conversation.py, test_conversation_safety.py (M6-FULL-03) | 2026-11-04 | Start script, not Docker Compose (D-31; Docker not installed, D-05). AC2 verified with a simulated outage. Not verified: a live run with the LLM API unreachable |
+
+## Live verification (2026-11-05)
+
+Statuses above are unchanged; this adds live evidence (LIVE-TG-01 Telegram, LIVE-DASH-01 dashboard).
+
+| Story | Live result |
+|---|---|
+| E1-S1, E1-S2, E1-S3 | PASS: consent, decline stores nothing, registration with shared contact |
+| E1-S4 | PARTIAL: prompt and Keep path PASS; the final deletion is run after the AI tests |
+| E2-S1..S4, E3-S1, E3-S2 (by chat) | DEFERRED: Gemini quota; booking rules verified through the dashboard (same service) |
+| E3-S3 | PASS through the reminder Cancel button (summary, Confirm cancel, audit) |
+| E4-S1, E4-S2, E4-S3, E4-S4 | PASS: both reminders, all three buttons, leave and staff-cancel notices with reason and Reschedule |
+| E5-S1, E5-S2, E5-S4 | DEFERRED: need the model |
+| E5-S3 | PASS: 112 reply, alert on the dashboard, acknowledged with audit |
+| E6-S1..S6 | PASS: roles, Today, leave, booking and cancel, attendance, weekly numbers (fixes D-43, D-46, D-47) |
+| E7-S2 | PASS: activity log for admins, denied to receptionists |
+| E7-S3 | PASS: rate limit on the 22nd message, 1,000-character limit |
+| E7-S4 | DEFERRED: needs the model |

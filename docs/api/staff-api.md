@@ -40,7 +40,7 @@ Source of truth for the dashboard (`apps/web`) and the FastAPI implementation (`
 ```ts
 type Role = "receptionist" | "admin";
 type StaffUser = { id: string; username: string; display_name: string; role: Role; active: boolean };
-type PatientRef = { id: string; full_name: string; phone: string | null };          // after deletion: "Deleted patient", null
+type PatientRef = { id: string; full_name: string; phone: string | null; telegram: boolean };  // telegram: linked, so reminders and notices reach them (D-47)          // after deletion: "Deleted patient", null
 type ReminderStatus = "pending" | "sent" | "failed" | "skipped" | null;             // null = no reminder row yet
 type Appointment = {
   id: string; reference: string; doctor_id: string; doctor_name: string;
@@ -107,4 +107,3 @@ Unknown appointment, ticket or alert ids → `404 NOT_FOUND`.
 Every write adds an audit row with `actor_type = "staff"` and the staff user id, in the same transaction as the change (GAP-18).
 
 Known gaps in the implementation (not verified by a test, found by reading the code):
-- The dashboard has no control for the password reset that `PATCH /staff-users/{id}` supports (`apps/web/lib/api/endpoints.ts` `updateStaffUser` sends no `password`).
