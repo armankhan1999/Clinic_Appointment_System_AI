@@ -12,6 +12,9 @@ from clinic.config import Settings, get_settings
 from clinic.observability import configure_logging
 
 HOST = "127.0.0.1"
+# Clients must close idle connections before the server does. The Next.js proxy (Node's global agent) idles
+# sockets for 5 s, uvicorn's default; a typical load balancer idles 60 s. 65 s keeps the server last.
+KEEP_ALIVE_SECONDS = 65
 
 
 def serve_options(settings: Settings) -> dict[str, Any]:
@@ -22,6 +25,7 @@ def serve_options(settings: Settings) -> dict[str, Any]:
         # access_log is off: the request middleware logs method, path, status and latency, no query strings.
         "access_log": False,
         "log_config": None,
+        "timeout_keep_alive": KEEP_ALIVE_SECONDS,
     }
 
 
