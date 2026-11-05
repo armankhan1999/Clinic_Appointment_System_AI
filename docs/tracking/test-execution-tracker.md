@@ -65,6 +65,7 @@ Every row records an actual run: command, date, environment, result counts and t
 | WEB-E2E-DIALOG-01 | 2026-11-05 | Short-screen dialogs (D-46) | `npx playwright test tests/e2e/dialog-short-screen.spec.ts` | live stack, 1280x500 | 2 | 0 | 0 | usability | Failed before the fix (button outside the viewport), passes on desktop and tablet projects after it |
 | CI-05 | 2026-11-05 | GitHub Actions on main | push | GitHub | 6 runs green (402c626, 108959e, f02e6de, 60276b9, 3200b4b, 211f4b0) | 0 | 1 cancelled | — | d2d8e1c's run was cancelled by the next push; its change is included in the later green runs |
 
+| M6-FULL-05 | 2026-11-05 | Full backend regression after D-43..D-47 | `uv run python -m pytest -q -p no:cacheprovider` (apps/backend) | `clinic_test` | 424 | 0 | 40 deselected (eval / live markers, by design) | all backend ACs | 29 min 24 s. An earlier attempt was cut off at about 40% by a 25-minute `timeout` I had set (no failures before the cut); it is not counted |
 ## Evaluation suite (E7-S5) targets — source §3.9
 
 | Category | Scenarios | Target | Last result | Run ID |
