@@ -109,6 +109,23 @@ cap, which exists to keep the "fallback within 10 s when the model is unreachabl
 would break E1-S1-AC3; the remaining lever is model latency itself (option C: a faster or paid tier), and
 option B for the 3.9 s of database time. Turns in passing scenarios took a median 7.4 s (max 22 s).
 
+### Final production run (AEV-PROD-06, 2026-11-05 evening)
+
+38 scenarios (35 from §3.9 plus XA-01..03), production budgets (8 s per model call, 25 s per turn), after D-50 (retry 5xx once) and D-51 (staged summary shown on model failure); one run to stay inside the free-tier quota ([report](eval-2026-11-05-production-final.md)).
+
+| Category (target) | Result | Met |
+|---|---|---|
+| Booking happy paths (≥ 90%) | 4/8 | no |
+| Reschedule and cancel (≥ 90%) | 5/6 | no |
+| Edge cases (≥ 90%) | 6/6 | yes |
+| Medical-advice requests (100%) | 5/5 | yes |
+| Emergency messages (100%) | 3/3 | yes |
+| Prompt injection / other patients' data (100%) | 4/4 | yes |
+| Questions not in the FAQ (100%) | 3/3 | yes |
+| Additional checks XA-01..03 | 1/3 | no |
+
+Task success 82% (31/38), correct-tool rate 87%, p95 reply 20.3 s. **All seven failures are a single model call that exceeded the 8 s per-call timeout** (`llm_unavailable error=TimeoutError` ×7; no 503, no turn budget exhausted); none is a wrong, ungrounded or unsafe answer. Every safety target is met at production settings. E2-S1-AC3 (booking ≥ 90%) stays open on model latency (R-GEM-02, NFR-01): the remaining lever is D-34 option C (a faster model or paid tier), not agent logic.
+
 ## Evening status (2026-11-04)
 
 - **Gemini quota reached.** The free tier allows **500 requests per day per project per model**
@@ -163,7 +180,7 @@ Evening (LIVE-TG-02) fixes: D-50 Gemini 5xx retried once, D-51 staged summary sh
 |---|---|
 | Reply time: option A is in place (D-34); the remaining failures need option C (model latency) and benefit from B | Arman |
 | Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate Google Cloud project for evaluations (limits are per project, not per key), or a paid tier | Arman |
-| Run the final 38-scenario evaluation at production settings (`EVAL_RUNS=2`) after the quota resets | Claude / Arman |
+| Final evaluation done (AEV-PROD-06: 31/38, all failures model timeouts). To close E2-S1-AC3: a faster model, a paid tier or a separate Google Cloud project, then rerun with `EVAL_RUNS=2` | Arman (decision) |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
 | ~~BLK-06~~ Done: every patient flow was used live in Telegram on 2026-11-05 (LIVE-TG-01, LIVE-TG-02), ending with /deletemydata and a database check | — |
 | Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |

@@ -86,3 +86,6 @@ Resolved: BLK-01 design approval, BLK-02 Supabase setup, BLK-03 Gemini limits (Q
 - LIVE-TG-02: all AI-driven patient flows passed live, ending with /deletemydata (Arman's data anonymised). Fixes D-50..D-53 merged with tests. Diagnostic budgets 15/45 were used for part of the run and removed afterwards (production 8/25 confirmed).
 - For Arman to decide: the seed FAQ says the clinic is open until 7 PM, but `staff_hours_text` says 6 PM; the bot used both in the same chat. Pick one and edit it under Clinic answers or Clinic settings.
 - Watch: the PC enters Modern Standby when idle, which stops long runs and breaks database connections until they reconnect (the stack recovered by itself within ≈15 s after each wake).
+- AEV-PROD-06 (final evaluation, production settings): 31/38; every safety category 100%; the 7 failures are all model calls over the 8 s timeout (E2-S1-AC3 stays open on latency). CI-06: two red runs from a test-typing slip, fixed in 6297f65.
+- Clean-up: Dr. Live Test, Dr. Live Test Two and the live_reset_test account deactivated (reversible). The walk-ins "Live Walkin One/Two" remain (not test-marked).
+- **Next task:** Arman decides D-34 option C (faster model, paid tier or separate project) and the 6 PM / 7 PM hours; then rerun the evaluation with `EVAL_RUNS=2`; owner actions BLK-05 and credential rotation.
