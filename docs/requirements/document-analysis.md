@@ -1,6 +1,6 @@
 # Document Analysis — Clinic Appointment Booking Agent
 
-Source: `docs/requirements/source/brd-prd-backlog.md`, a byte-identical copy of `Clinic Appointment Booking Agent — BRD, PRD & Product Backlog.md` (dated Oct 28, 2026, author Arman Khan). `L<n>` = line in that file. Full itemised inventory: `requirements-inventory.md`.
+Source: `docs/requirements/source/brd-prd-backlog.md`, a copy of `Clinic Appointment Booking Agent — BRD, PRD & Product Backlog.md` (dated Oct 28, 2026, author Arman Khan), identical except the §5.2 Status cells, set to Done on 2026-11-06 (028e0c2); no line moved. `L<n>` = line in that file. Full itemised inventory: `requirements-inventory.md`.
 
 Sections 1–8 are the analysis of the source as written (2026-11-02). The **Status** columns in §9 and §10, and the status notes in §11–§14, were audited against the code, the migrations and the decision log on 2026-11-05 (commit 3938155). Code paths are relative to `apps/backend/src/clinic/` unless they start with `apps/`, `infrastructure/` or `scripts/`. Decisions: `docs/tracking/decision-log.md`. Several decisions (D-04, D-06..D-11, D-13..D-16, D-18) are recorded there as PROPOSED; D-22 records their approval as part of the design spec.
 

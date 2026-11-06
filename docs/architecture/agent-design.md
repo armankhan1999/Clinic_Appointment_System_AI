@@ -141,6 +141,6 @@ On Confirm, `services/booking.py` re-validates everything inside one transaction
 
 The run writes `apps/backend/reports/eval-<UTC timestamp>.md` and `.json` with pass/fail per scenario and category, task success rate, correct-tool rate, average tool calls per task, p95 reply time and each failure with its conversation and tool calls (E7-S5-AC1/AC2). `EVAL_RUNS=N` repeats every scenario (default 1); `EVAL_BUDGET_SECONDS` sets a larger diagnostic budget for both the call and the turn. The suite is not part of the default pytest run or CI.
 
-Recorded results (`docs/testing/acceptance-report.md`): 35/35 with a 45 s diagnostic budget (AEV-DIAG-03); 19/35 at the current production settings (AEV-PROD-02), where every failure was a single model call over 8 s on the free tier, not a wrong answer. **Not done yet:** a run of all 38 scenarios at production settings (AEV-PROD-04 and AEV-PROD-05 were stopped by the free-tier quota), and repeated runs to measure variance (every recorded run used `EVAL_RUNS=1`).
+Recorded results (`docs/testing/acceptance-report.md`): 35/35 with a 45 s diagnostic budget (AEV-DIAG-03); 31/38 for all 38 scenarios at production settings (AEV-PROD-06, 2026-11-05), where all 7 failures were a single model call over the 8 s per-call timeout, not a wrong answer; every safety category passed 100%. **Not done yet:** repeated runs to measure variance (every recorded run used `EVAL_RUNS=1`).
 
 Unit tests for the loop use a scripted test double for the LLM adapter (the external dependency), never a mock of the loop itself.

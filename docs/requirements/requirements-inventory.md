@@ -1,6 +1,6 @@
 # Requirements Inventory
 
-Source: `docs/requirements/source/brd-prd-backlog.md` (byte-identical copy of `Clinic Appointment Booking Agent — BRD, PRD & Product Backlog.md`, 858 lines, dated Oct 28, 2026). `L<n>` = line number in that file. The source is Markdown, so there are no page numbers; section headings and line numbers are used instead.
+Source: `docs/requirements/source/brd-prd-backlog.md` (copy of `Clinic Appointment Booking Agent — BRD, PRD & Product Backlog.md`, 858 lines, dated Oct 28, 2026; identical except the §5.2 Status cells, set to Done on 2026-11-06 in 028e0c2, so every line number still holds). `L<n>` = line number in that file. The source is Markdown, so there are no page numbers; section headings and line numbers are used instead.
 
 Rows marked **Source = BRD-PRD** are original requirements, quoted or condensed from the document without changing meaning. Rows in sections 14 and 15 are **not** original: `IMP-*` are requirements implied by original ones (needed to satisfy them), and `MP-*` come from the master execution prompt. Each one says where it came from.
 
