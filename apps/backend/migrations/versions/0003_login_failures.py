@@ -1,6 +1,7 @@
 """Lockout state for unknown staff usernames, stored like real accounts' (E6-S1-AC3, no enumeration).
 
-Keyed by SHA-256 of the normalised username, so attempted usernames are never stored in clear. Shared by
+Keyed by an HMAC-SHA256 of the normalised username with the app secret (services/staff_auth.py), so
+attempted usernames are never stored in clear and cannot be recovered by hashing guesses. Shared by
 every API process and kept across restarts, exactly like the lockout columns on staff_users.
 
 Revision ID: 0003
