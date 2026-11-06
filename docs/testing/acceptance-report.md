@@ -1,9 +1,17 @@
-# Acceptance report (2026-11-04)
+# Acceptance report (2026-11-04, updated 2026-11-06)
 
 Status of the Clinic Appointment Booking Agent against the PRD (`docs/requirements/source/brd-prd-backlog.md`),
 with every figure taken from a recorded run in [`../tracking/test-execution-tracker.md`](../tracking/test-execution-tracker.md).
 Story and AC detail: [`../tracking/user-story-tracker.md`](../tracking/user-story-tracker.md) and
 [`../tracking/requirement-traceability-matrix.md`](../tracking/requirement-traceability-matrix.md).
+
+## Status at a glance (2026-11-06)
+
+- **All 32 stories and all 7 epics are COMPLETED.** The last open criterion, E2-S1-AC3 (an unknown specialty is reported and no doctor is invented), passed at production settings: XA-01 in AEV-PROD-06.
+- **Final evaluation at production settings** (AEV-PROD-06, 38 scenarios, 8 s per model call, 25 s per turn): 31/38. Edge cases, medical advice, emergencies, prompt injection and not-in-FAQ meet their §3.9 targets; booking (4/8) and reschedule/cancel (5/6) are below 90%. The gap is explained below, as E7-S5-AC3 allows: all 7 failures are one model call over the 8 s per-call timeout.
+- **NFR-01 (reply ≤ 5 s for 95%) is not met:** p95 20.3 s in AEV-PROD-06.
+- **Every patient flow was used live in Telegram** (LIVE-TG-01, LIVE-TG-02) and every staff-dashboard feature passed E2E on the live stack (WEB-E2E-06, 54/54) and live use (LIVE-DASH-01).
+- **Before go-live** (owner): the reply-time decision (D-34 option C), the Supabase CA certificate (BLK-05), credential rotation, the 6 PM / 7 PM clinic hours, and the open source gaps; see [Open items before go-live](#open-items-before-go-live) and [`../tracking/release-readiness.md`](../tracking/release-readiness.md).
 
 ## What exists
 
@@ -14,7 +22,7 @@ Story and AC detail: [`../tracking/user-story-tracker.md`](../tracking/user-stor
 | Reminders and notices | `services/reminders.py`, `services/notifications.py`, PTB job queue | 24 h and 2 h reminders, claimed once; outbox with retries and staff flag |
 | Staff API | `apps/backend/src/clinic/api`, contract `docs/api/staff-api.md` | Session cookie + CSRF, roles, lockout, audit, pagination |
 | Staff dashboard | `apps/web` (Next.js 16) | Today, booking, admin screens (doctors, schedules, leave, FAQ, settings, audit, metrics, staff accounts) |
-| Evaluation suite | `apps/backend/tests/integration/test_agent_eval.py` | 35 scenarios of PRD §3.9; reports in `apps/backend/reports/`, copies in this folder |
+| Evaluation suite | `apps/backend/tests/integration/test_agent_eval.py` | 38 scenarios: the 35 of PRD §3.9 plus XA-01..03; reports in `apps/backend/reports/`, copies in this folder |
 | Packaging and CI | `scripts/start.ps1`, `scripts/stop.ps1`, `.github/workflows/ci.yml` | One-command start; CI for backend and dashboard |
 
 ## Verification summary
@@ -28,10 +36,20 @@ Story and AC detail: [`../tracking/user-story-tracker.md`](../tracking/user-stor
 | START-01 / START-02 one-command start | 23.5 s (cached build), 24.0 s (fresh build) |
 | FRESH-01 README steps from a clean clone (no credentials) | install, 220 + 116 tests, build: all pass |
 | SEC-SCAN-01 secrets in history and tracked files | 0 hits |
-| CI-01 first GitHub Actions run | **failed** (4 TLS unit tests saw the job's `DB_SSL`); fixed and reproduced locally, not yet re-run on GitHub |
+| CI-01 first GitHub Actions run | **failed** (4 TLS unit tests saw the job's `DB_SSL`); reproduced locally and fixed in 6f7a9b1; the next GitHub run, CI-02, was green |
 | M6-FULL-02 final backend regression | 414 passed, 0 failed (37 eval/live tests deselected by design) |
 | M6-FULL-03 after D-33/D-34 | 418 passed, 0 failed |
 | CI-02 GitHub Actions on PR #1 | green: backend 414 passed, web 116 passed, audits clean |
+| M6-FULL-05 full backend regression (2026-11-05, after D-43..D-47) | 424 passed, 0 failed |
+| BE-UNIT-06 backend unit tests after D-50, D-52, D-53 | 244 passed, 0 failed |
+| CONV-INT-02 conversation integration tests after D-51 | 58 passed, 0 failed |
+| WEB-UNIT-05 dashboard unit/component on merged main | 127 passed; ESLint and tsc clean |
+| WEB-E2E-05 / WEB-E2E-06 every staff-dashboard feature, desktop + tablet | 54 passed each; WEB-E2E-06 on the live :3100 stack |
+| LIVE-TG-01 / LIVE-TG-02 patient flows live in Telegram | 19 and 11 checks passed |
+| LIVE-DASH-01 receptionist and admin live in the dashboard | 26 checks passed; defects D-43..D-47 found and fixed |
+| KEEPALIVE-01 / ROT-01 | API keep-alive outlives the dashboard proxy (D-48); exposed e2e_desk test password rotated |
+| AEV-PROD-06 final evaluation at production settings | 31/38 (see [Final production run](#final-production-run-aev-prod-06-2026-11-05-evening)) |
+| CI-06 GitHub Actions on main (2026-11-05 evening) | green on 6297f65, which fixed two red runs (a test double's type) |
 
 ## Agent evaluation against PRD §3.9 (E7-S5-AC3)
 
@@ -124,7 +142,11 @@ option B for the 3.9 s of database time. Turns in passing scenarios took a media
 | Questions not in the FAQ (100%) | 3/3 | yes |
 | Additional checks XA-01..03 | 1/3 | no |
 
-Task success 82% (31/38), correct-tool rate 87%, p95 reply 20.3 s. **All seven failures are a single model call that exceeded the 8 s per-call timeout** (`llm_unavailable error=TimeoutError` ×7; no 503, no turn budget exhausted); none is a wrong, ungrounded or unsafe answer. Every safety target is met at production settings. E2-S1-AC3 (booking ≥ 90%) stays open on model latency (R-GEM-02, NFR-01): the remaining lever is D-34 option C (a faster model or paid tier), not agent logic.
+Task success 82% (31/38), correct-tool rate 87%, p95 reply 20.3 s. **All seven failures are a single model call that exceeded the 8 s per-call timeout** (`llm_unavailable error=TimeoutError` ×7; no 503, no turn budget exhausted); none is a wrong, ungrounded or unsafe answer. Every safety target is met at production settings.
+
+XA-01 passed with a real answer, so **E2-S1-AC3** (the agent says the clinic has no such specialty and invents no doctor) **is met**. What stays short is the §3.9 target of 90% for booking (4/8) and reschedule/cancel (5/6) at production settings: the E7 success metric ("evaluation targets in section 3.9 met"), which is also the E2 and E3 success metric. E7-S5-AC3 accepts a target that is met **or whose gap is explained in the project report**; this is the explanation: every one of the 7 failures (BK-02, BK-03, BK-04, BK-06, RC-04, XA-02, XA-03) is a single model call cut off at the 8 s per-call timeout (R-GEM-02), the same model latency that leaves NFR-01 unmet (p95 20.3 s). XA-02 and XA-03 passed with real answers earlier (AEV-DIAG-04) and live (LIVE-TG-02). The remaining lever is D-34 option C (a faster model, a paid tier, or a separate Google Cloud project for evaluations), then a rerun with `EVAL_RUNS=2`; it is not agent logic.
+
+*Corrected 2026-11-06: the first version of this paragraph said "E2-S1-AC3 (booking ≥ 90%) stays open on model latency". That confused two things: E2-S1-AC3 is the no-invented-doctor check, and it passed; the open item is the §3.9 booking and reschedule/cancel targets, explained above.*
 
 ## Evening status (2026-11-04)
 
@@ -147,7 +169,7 @@ Task success 82% (31/38), correct-tool rate 87%, p95 reply 20.3 s. **All seven f
 
 ## Live persona tests (2026-11-05)
 
-Every persona was exercised on the running stack (dev mode) with real Telegram and a real browser. Free-text replies were the fallback all morning because the Gemini daily quota was used up, so the AI-driven flows are listed as deferred, not passed.
+Every persona was exercised on the running stack (dev mode) with real Telegram and a real browser. Free-text replies were the fallback all morning because the Gemini daily quota was used up, so the AI-driven flows were deferred to the evening and then passed (LIVE-TG-02).
 
 | Persona | Channel | Verified live | Deferred |
 |---|---|---|---|
@@ -162,7 +184,7 @@ Evening (LIVE-TG-02) fixes: D-50 Gemini 5xx retried once, D-51 staged summary sh
 
 | NFR | Status | Evidence |
 |---|---|---|
-| NFR-01 reply ≤ 5 s for 95% | **Not met on this PC** | p95 10.5 s (production budget) / 23.3 s (diagnostic); model alone ≈ 5.5 s median |
+| NFR-01 reply ≤ 5 s for 95% | **Not met on this PC** | p95 20.3 s at production settings (AEV-PROD-06, 38 scenarios); earlier 10.5 s (AEV-PROD-01), 20.0 s (AEV-PROD-02), 23.3 s (diagnostic); model alone ≈ 5.5 s median per turn on 2026-11-04, about 6–7 s per call on 2026-11-05 (R-GEM-02) |
 | NFR-02 no duplicate or missed reminders | Met (automated) | `test_reminders_are_never_sent_twice_even_after_a_restart` (M6-FULL-01) |
 | NFR-03 secrets only in `.env` | Met | `.gitignore`, SEC-SCAN-01, START-01 log scan |
 | NFR-04 hashed passwords, lockout | Met | argon2id, 5 failures / 15 min (test_staff_auth.py) |
@@ -178,11 +200,13 @@ Evening (LIVE-TG-02) fixes: D-50 Gemini 5xx retried once, D-51 staged summary sh
 
 | Item | Owner |
 |---|---|
-| Reply time: option A is in place (D-34); the remaining failures need option C (model latency) and benefit from B | Arman |
+| Reply time (DEC-RT): option A is in place (D-34); NFR-01 is not met (p95 20.3 s, AEV-PROD-06) and the remaining failures need option C (model latency) and benefit from B | Arman |
 | Gemini quota: 500 requests/day on the free tier is shared by the bot and the evaluation suite; use a separate Google Cloud project for evaluations (limits are per project, not per key), or a paid tier | Arman |
-| Final evaluation done (AEV-PROD-06: 31/38, all failures model timeouts). To close E2-S1-AC3: a faster model, a paid tier or a separate Google Cloud project, then rerun with `EVAL_RUNS=2` | Arman (decision) |
+| Final evaluation done (AEV-PROD-06: 31/38, all failures model timeouts). Booking 4/8 and reschedule/cancel 5/6 stay below the §3.9 target (gap explained above). Decide option C (a faster model, a paid tier or a separate Google Cloud project), then rerun with `EVAL_RUNS=2` to measure variance | Arman (decision) |
 | BLK-05: install the Supabase CA certificate and set `DB_SSL_ROOT_CERT` (verify-full TLS) | Arman |
 | ~~BLK-06~~ Done: every patient flow was used live in Telegram on 2026-11-05 (LIVE-TG-01, LIVE-TG-02), ending with /deletemydata and a database check | — |
 | Rotate the database password, Gemini key and bot token shared in chat during setup | Arman |
-| Review and merge PR #1 (CI green: backend 414 passed, web 116 passed, audits clean) | Arman |
+| Clinic hours: the seed FAQ says open until 7 PM, `staff_hours_text` says 6 PM, and the bot used both in one chat (LIVE-TG-02). Pick one and edit it under Clinic answers or Clinic settings | Arman |
+| Open source gaps (`../requirements/document-analysis.md` §9–§10): GAP-02 diagrams and "3 gates" never supplied; GAP-27 time zone and GAP-28 emergency number and phrases not confirmed by a clinic; GAP-30 no retention periods, and no privacy assessment written | Arman |
+| Live test data in the dev database: doctors "Dr. Live Test" and "Dr. Live Test Two" and staff account `live_reset_test` are deactivated (reversible); walk-in patients "Live Walkin One/Two" remain (not test-marked) | Arman |
 | Security residual risks: [`../security/security-review.md`](../security/security-review.md) | — |
