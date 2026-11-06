@@ -438,38 +438,38 @@ Risky parts come first: booking and double-booking prevention by week 4, safety 
 
 | ID | Story | Epic | Priority | Points | Sprint | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| E7-S1 | Project setup and configuration | E7 | Must | 2 | 1 | Not started |
-| E1-S1 | Start a conversation | E1 | Must | 2 | 1 | Not started |
-| E1-S2 | Register with phone number and name | E1 | Must | 3 | 1 | Not started |
-| E1-S3 | Give consent before data is stored | E1 | Must | 1 | 1 | Not started |
-| E2-S1 | List doctors and specialties | E2 | Must | 2 | 1 | Not started |
-| E7-S2 | Audit log of agent actions | E7 | Must | 3 | 1 | Not started |
-| E2-S2 | Check available slots | E2 | Must | 5 | 2 | Not started |
-| E2-S3 | Book with explicit confirmation | E2 | Must | 5 | 2 | Not started |
-| E2-S4 | Prevent double booking | E2 | Must | 3 | 2 | Not started |
-| E5-S3 | Redirect emergencies | E5 | Must | 2 | 2 | Not started |
-| E3-S1 | View my appointments | E3 | Must | 2 | 3 | Not started |
-| E3-S2 | Reschedule an appointment | E3 | Must | 5 | 3 | Not started |
-| E3-S3 | Cancel an appointment | E3 | Must | 3 | 3 | Not started |
-| E5-S2 | Refuse medical advice | E5 | Must | 3 | 3 | Not started |
-| E2-S5 | Understand relative dates | E2 | Should | 3 | 3 | Not started |
-| E4-S1 | 24-hour reminder | E4 | Must | 3 | 4 | Not started |
-| E4-S3 | Act on reminder buttons | E4 | Must | 3 | 4 | Not started |
-| E4-S2 | 2-hour reminder | E4 | Should | 1 | 4 | Not started |
-| E5-S1 | Answer clinic questions | E5 | Should | 3 | 4 | Not started |
-| E5-S4 | Hand off to a human | E5 | Should | 3 | 4 | Not started |
-| E7-S3 | Rate limiting and input validation | E7 | Should | 2 | 4 | Not started |
-| E6-S1 | Staff login | E6 | Must | 3 | 5 | Not started |
-| E6-S2 | View the daily schedule | E6 | Must | 3 | 5 | Not started |
-| E6-S3 | Manage doctor schedules and leave | E6 | Must | 5 | 5 | Not started |
-| E6-S4 | Book or cancel for walk-in and phone patients | E6 | Should | 3 | 5 | Not started |
-| E4-S4 | Notify patients of clinic-side changes | E4 | Should | 3 | 5 | Not started |
-| E7-S5 | Agent evaluation suite | E7 | Must | 5 | 6 | Not started |
-| E1-S4 | Delete my data | E1 | Should | 2 | 6 | Not started |
-| E6-S5 | Mark attendance | E6 | Should | 2 | 6 | Not started |
-| E7-S4 | Prompt injection resilience | E7 | Should | 3 | 6 | Not started |
-| E7-S6 | Demo packaging | E7 | Should | 2 | 6 | Not started |
-| E6-S6 | Weekly booking metrics | E6 | Could | 3 | 6 | Not started |
+| E7-S1 | Project setup and configuration | E7 | Must | 2 | 1 | Done |
+| E1-S1 | Start a conversation | E1 | Must | 2 | 1 | Done |
+| E1-S2 | Register with phone number and name | E1 | Must | 3 | 1 | Done |
+| E1-S3 | Give consent before data is stored | E1 | Must | 1 | 1 | Done |
+| E2-S1 | List doctors and specialties | E2 | Must | 2 | 1 | Done |
+| E7-S2 | Audit log of agent actions | E7 | Must | 3 | 1 | Done |
+| E2-S2 | Check available slots | E2 | Must | 5 | 2 | Done |
+| E2-S3 | Book with explicit confirmation | E2 | Must | 5 | 2 | Done |
+| E2-S4 | Prevent double booking | E2 | Must | 3 | 2 | Done |
+| E5-S3 | Redirect emergencies | E5 | Must | 2 | 2 | Done |
+| E3-S1 | View my appointments | E3 | Must | 2 | 3 | Done |
+| E3-S2 | Reschedule an appointment | E3 | Must | 5 | 3 | Done |
+| E3-S3 | Cancel an appointment | E3 | Must | 3 | 3 | Done |
+| E5-S2 | Refuse medical advice | E5 | Must | 3 | 3 | Done |
+| E2-S5 | Understand relative dates | E2 | Should | 3 | 3 | Done |
+| E4-S1 | 24-hour reminder | E4 | Must | 3 | 4 | Done |
+| E4-S3 | Act on reminder buttons | E4 | Must | 3 | 4 | Done |
+| E4-S2 | 2-hour reminder | E4 | Should | 1 | 4 | Done |
+| E5-S1 | Answer clinic questions | E5 | Should | 3 | 4 | Done |
+| E5-S4 | Hand off to a human | E5 | Should | 3 | 4 | Done |
+| E7-S3 | Rate limiting and input validation | E7 | Should | 2 | 4 | Done |
+| E6-S1 | Staff login | E6 | Must | 3 | 5 | Done |
+| E6-S2 | View the daily schedule | E6 | Must | 3 | 5 | Done |
+| E6-S3 | Manage doctor schedules and leave | E6 | Must | 5 | 5 | Done |
+| E6-S4 | Book or cancel for walk-in and phone patients | E6 | Should | 3 | 5 | Done |
+| E4-S4 | Notify patients of clinic-side changes | E4 | Should | 3 | 5 | Done |
+| E7-S5 | Agent evaluation suite | E7 | Must | 5 | 6 | Done |
+| E1-S4 | Delete my data | E1 | Should | 2 | 6 | Done |
+| E6-S5 | Mark attendance | E6 | Should | 2 | 6 | Done |
+| E7-S4 | Prompt injection resilience | E7 | Should | 3 | 6 | Done |
+| E7-S6 | Demo packaging | E7 | Should | 2 | 6 | Done |
+| E6-S6 | Weekly booking metrics | E6 | Could | 3 | 6 | Done |
 
 ### 5.3 Planning rules
 
