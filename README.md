@@ -12,13 +12,13 @@ Design: [`docs/architecture/`](docs/architecture/README.md) · API contract: [`d
 
 ## Status
 
-All 32 stories of the source have an implementation: the Telegram bot and agent, the staff API and dashboard, reminders and clinic-side notices, and the 38-scenario evaluation suite. The [story tracker](docs/tracking/user-story-tracker.md) lists 31 as COMPLETED and E2-S1 as TESTING (E2-S1-AC3 still lacks a genuine evaluation pass). Where the build differs from the source on purpose (Next.js instead of Streamlit, Postgres only, a PowerShell start script instead of Docker Compose), see [`docs/architecture/README.md`](docs/architecture/README.md#built-versus-source).
+All 32 stories of the source have an implementation: the Telegram bot and agent, the staff API and dashboard, reminders and clinic-side notices, and the 38-scenario evaluation suite. The [story tracker](docs/tracking/user-story-tracker.md) lists all 32 as COMPLETED; the last one, E2-S1, closed when XA-01 (no invented doctor) passed at production settings in the final evaluation run (AEV-PROD-06). Where the build differs from the source on purpose (Next.js instead of Streamlit, Postgres only, a PowerShell start script instead of Docker Compose), see [`docs/architecture/README.md`](docs/architecture/README.md#built-versus-source).
 
 Not met or not done yet (details in the [acceptance report](docs/testing/acceptance-report.md)):
 
-- **Reply time (NFR-01, ≤ 5 s for 95% of messages) is not met** on the dev PC: in the recorded runs the free-tier model alone took a median of 5.5–8.0 s per turn.
-- **The evaluation targets of §3.9 are met only with a 45 s diagnostic budget** (35/35, AEV-DIAG-03); at the production settings the last complete run passed 19/35 (AEV-PROD-02), every failure being a model call over 8 s. The final run of all 38 scenarios at production settings has not produced results: it was stopped twice by the Gemini free-tier quota (500 requests per day, shared with the bot).
-- Verified database TLS needs the Supabase CA certificate, which is not yet installed on the dev PC (BLK-05); every patient flow, including booking and managing appointments by chat, was used live in Telegram on 2026-11-05 (BLK-06 closed).
+- **Reply time (NFR-01, ≤ 5 s for 95% of messages) is not met** on the dev PC: p95 20.3 s in the final evaluation run (AEV-PROD-06); the free-tier model alone takes about 6–7 s per call.
+- **Two §3.9 targets are met only with a 45 s diagnostic budget** (35/35, AEV-DIAG-03). The final run of all 38 scenarios at production settings (AEV-PROD-06) passed 31/38: edge cases, medical advice, emergencies, prompt injection and questions not in the FAQ meet their targets, but booking (4/8) and reschedule/cancel (5/6) are below 90%. Every failure was one model call over the 8 s per-call timeout, not a wrong answer. A faster model or paid tier (D-34 option C) is the owner's decision.
+- Verified database TLS needs the Supabase CA certificate, which is not yet installed on the dev PC (BLK-05); the credentials shared during setup still need rotating. Every patient flow, including booking and managing appointments by chat, was used live in Telegram on 2026-11-05 (BLK-06 closed).
 - No cloud deployment, backup/restore procedure or privacy assessment exists.
 
 ## Prerequisites
