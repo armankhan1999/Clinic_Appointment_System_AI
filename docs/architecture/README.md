@@ -4,6 +4,7 @@ The design spec was approved by Arman on 2026-11-03 (D-22). These documents now 
 
 | Document | Contents |
 |---|---|
+| [hld-lld.md](hld-lld.md) | Consolidated high-level and low-level design as built, verified line by line against the code at 97ccc23 (8 November 2026): processes, layers, every table, service, tool, flow, endpoint, dashboard module, configuration, operations, tests and known limitations |
 | [system-architecture.md](system-architecture.md) | Context, processes, package layering, repo layout, how it runs, platform facts, cross-cutting concerns |
 | [database-design.md](database-design.md) | ERD, every table with constraints and indexes, double-booking defences, database access control, migrations |
 | [agent-design.md](agent-design.md) | Message pipeline, confirmation gate, the 8 tools, guardrails, grounding guard, Gemini integration, time budgets, privacy, failure handling, evaluation suite |
