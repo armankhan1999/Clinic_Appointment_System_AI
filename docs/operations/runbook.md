@@ -63,7 +63,7 @@ Logs never contain chat text, names, phone numbers or secrets (redaction in `obs
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `Failed to spawn: pytest … An Application Control policy has blocked this file (os error 4551)` | Windows Application Control blocks some console-script launchers (`pytest.exe`, `pip-audit.exe`) | `uv run python -m pytest …`, `uv run python -m pip_audit` |
+| `Failed to spawn: pytest … An Application Control policy has blocked this file (os error 4551)` | Windows Application Control blocks some console-script launchers (`pytest.exe`, `pip-audit.exe`; since 2026-11-10 also `clinic-api.exe`) | `uv run python -m pytest …`, `uv run python -m pip_audit`; `start.ps1` and `restart.ps1` start the API and bot as `python -m clinic.api` / `python -m clinic.bot` |
 | Port 3000 or 8000 already in use | Other programs on this PC | `-WebPort 3100`; `API_PORT=8010` in `.env` (rebuild the dashboard after changing it) |
 | `EADDRINUSE` after stopping a background run, or tests failing with 401s | A stopped shell left its `node`/`python` child running (it may also keep truncating `clinic_test`) | Find it: `Get-CimInstance Win32_Process -Filter "Name='node.exe' OR Name='python.exe'"`; stop only that PID |
 | Bot replies "Sorry, I can't answer right now…" | Gemini slower than `LLM_TIMEOUT_SECONDS` per call, or the whole reply over `AGENT_TURN_BUDGET_SECONDS` | Provider latency (R-GEM-02); measured 11–37 s per minimal call on 2026-11-04 afternoon |

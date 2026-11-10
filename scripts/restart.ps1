@@ -31,8 +31,9 @@ if (-not $line) { throw "$Part is not part of the running stack (was it started 
 $oldId = ($line -split '=', 2)[1]
 if (Get-Process -Id ([int]$oldId) -ErrorAction SilentlyContinue) { taskkill /PID $oldId /T /F | Out-Null }
 
-$command = if ($Part -eq 'api') { 'clinic-api' } else { 'clinic-bot' }
-$process = Start-Process -FilePath (Get-Command uv).Source -ArgumentList @('run', $command) -WorkingDirectory $backend `
+# A module, not the .exe launcher, which Windows Application Control can block (see start.ps1).
+$module = if ($Part -eq 'api') { 'clinic.api' } else { 'clinic.bot' }
+$process = Start-Process -FilePath (Get-Command uv).Source -ArgumentList @('run', 'python', '-m', $module) -WorkingDirectory $backend `
     -PassThru -WindowStyle Hidden `
     -RedirectStandardOutput (Join-Path $logs "$Part.out.log") `
     -RedirectStandardError (Join-Path $logs "$Part.err.log")
