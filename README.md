@@ -75,8 +75,8 @@ Or run each part in its own terminal:
 
 ```powershell
 Set-Location apps/backend
-uv run clinic-api     # terminal 1
-uv run clinic-bot     # terminal 2, then message your bot in Telegram and send /start
+uv run python -m clinic.api     # terminal 1 (same as `uv run clinic-api`)
+uv run python -m clinic.bot     # terminal 2 (same as `uv run clinic-bot`), then message your bot in Telegram and send /start
 ```
 
 If the model is unreachable, the bot answers with a short "try again" message and the clinic phone number

@@ -1477,8 +1477,10 @@ dashboard, not configuration.
 3. Unless `-Dev`, runs `npm run build` when `-Rebuild` is given, no build exists, or the build was made for a
    different API port (marker `.next/clinic-api-port`), because the rewrite target is fixed at build time.
 4. Starts three hidden processes with output in `logs\<part>.out.log` / `.err.log`, recording
-   `<part>=<pid>` in `logs\stack.pids`: **api** `uv run clinic-api` (in `apps/backend`), **bot**
-   `uv run clinic-bot` (skipped with `-NoBot`), **web** `next start -p <WebPort>` (or `next dev` with `-Dev`).
+   `<part>=<pid>` in `logs\stack.pids`: **api** `uv run python -m clinic.api` (in `apps/backend`), **bot**
+   `uv run python -m clinic.bot` (skipped with `-NoBot`), **web** `next start -p <WebPort>` (or `next dev`
+   with `-Dev`). The modules are used instead of the `clinic-api` / `clinic-bot` `.exe` launchers because
+   Windows Application Control blocked the API launcher on 2026-11-10.
 5. Polls every 2 s until ready: API `GET /readyz` = 200, web `GET /login` = 200, bot log contains
    `scheduler_heartbeat`. If a part exits early or the time-out passes, it runs `stop.ps1` and fails.
 

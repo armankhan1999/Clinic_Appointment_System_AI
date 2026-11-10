@@ -105,8 +105,9 @@ function Test-Http([string]$Url) {
 $uv = (Get-Command uv).Source
 $node = (Get-Command node).Source
 $parts = [ordered]@{}
-$parts.api = Start-Part 'api' $backend $uv @('run', 'clinic-api')
-if (-not $NoBot) { $parts.bot = Start-Part 'bot' $backend $uv @('run', 'clinic-bot') }
+# Modules, not the clinic-api/clinic-bot .exe launchers: Windows Application Control can block those launchers.
+$parts.api = Start-Part 'api' $backend $uv @('run', 'python', '-m', 'clinic.api')
+if (-not $NoBot) { $parts.bot = Start-Part 'bot' $backend $uv @('run', 'python', '-m', 'clinic.bot') }
 $nextMode = if ($Dev) { 'dev' } else { 'start' }
 $parts.web = Start-Part 'web' $web $node @('node_modules/next/dist/bin/next', $nextMode, '-p', "$WebPort")
 
