@@ -40,8 +40,8 @@ class Settings(BaseSettings):
     # Keys the hashes of attempted staff usernames (never stored in the database). 32+ random characters.
     auth_secret: SecretStr = Field(min_length=32)
     gemini_model: str
-    # One model call: past this the provider counts as unreachable and the patient gets the fallback
-    # reply within 10 s (E1-S1-AC3).
+    # One model call attempt. A call past it is sent once more (D-54); a provider that never answers gives
+    # the patient the fallback reply after two timeouts, about 16 s (E1-S1-AC3 was 10 s before D-54).
     llm_timeout_seconds: float = 8.0
     # A whole turn (several model calls, tools and audit writes) while the provider keeps answering.
     agent_turn_budget_seconds: float = 25.0

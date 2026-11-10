@@ -181,7 +181,8 @@ async def test_a_provider_that_stays_down_is_given_up_after_one_retry() -> None:
 
 
 async def test_one_model_call_is_cut_off_at_the_per_call_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    """E1-S1-AC3 with the split budget: a provider that never answers fails one call within its timeout.
+    """E1-S1-AC3 with the split budget: a provider that never answers fails the call within two per-call
+    timeouts (one retry, D-54).
 
     Only the third-party SDK call is replaced; the timeout handling under test is GeminiLLM's own.
     """
@@ -197,6 +198,46 @@ async def test_one_model_call_is_cut_off_at_the_per_call_timeout(monkeypatch: py
         await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
     assert loop.time() - started < 1.0
     await llm.aclose()
+
+
+def _gemini_answering_after(
+    delays: list[float], timeout_s: float
+) -> tuple[GeminiLLM, list[float], httpx.AsyncClient]:
+    """A real GeminiLLM whose HTTP layer waits `delays[n]` seconds before answering request n (no network)."""
+    seen: list[float] = []
+
+    async def answer(request: httpx.Request) -> httpx.Response:
+        delay = delays[min(len(seen), len(delays) - 1)]
+        seen.append(delay)
+        await asyncio.sleep(delay)
+        body = {
+            "candidates": [{"content": {"role": "model", "parts": [{"text": "OK"}]}, "finishReason": "STOP"}]
+        }
+        return httpx.Response(200, json=body)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(answer))
+    llm = GeminiLLM(SecretStr("not-a-real-key"), "gemini-3.5-flash-lite", timeout_s, http_client=client)
+    return llm, seen, client
+
+
+async def test_a_call_past_the_timeout_is_tried_once_more() -> None:
+    # Live 2026-11-10: identical calls took 1.1-1.6 s, but some took 15 s and 51 s, so the patient got
+    # "can't answer right now"; the call after a slow one was fast again (D-54).
+    llm, seen, client = _gemini_answering_after([5.0, 0.0], timeout_s=0.2)
+    turn = await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
+    assert (turn.text, len(seen)) == ("OK", 2)
+    await client.aclose()
+
+
+async def test_a_provider_that_never_answers_is_given_up_after_one_timeout_retry() -> None:
+    llm, seen, client = _gemini_answering_after([5.0], timeout_s=0.1)
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    with pytest.raises(LlmUnavailableError):
+        await llm.generate(system="rules", transcript=[UserText("hello")], tools=[])
+    assert len(seen) == 2, "one retry, not more: the turn budget must still leave room for the reply"
+    assert loop.time() - started < 1.0
+    await client.aclose()
 
 
 def test_model_markdown_emphasis_is_removed_because_telegram_shows_it_raw() -> None:

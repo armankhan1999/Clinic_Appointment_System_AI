@@ -48,7 +48,8 @@ Invoke-RestMethod http://127.0.0.1:8010/readyz    # {"status":"ready"}: the data
 | Event | Level | Meaning | Action |
 |---|---|---|---|
 | `db_tls_unverified` | warning | Database TLS is encrypted but the server certificate is not verified | Install the Supabase CA and set `DB_SSL_ROOT_CERT` (blocker BLK-05) |
-| `llm_unavailable` | warning | One Gemini call failed or exceeded `LLM_TIMEOUT_SECONDS`; the patient got the fallback reply | Check the provider; frequent → faster or paid model tier |
+| `llm_timeout_retry` | warning | A Gemini call passed `LLM_TIMEOUT_SECONDS` and is being sent once more (D-54); the patient still gets an answer if the retry is fast | None for occasional lines; frequent → faster or paid model tier |
+| `llm_unavailable` | warning | One Gemini call failed, or timed out twice; the patient got the fallback reply | Check the provider; frequent → faster or paid model tier |
 | `agent_budget_exhausted` | warning | A whole reply exceeded `AGENT_TURN_BUDGET_SECONDS` | As above, or database latency (R-LAT-01) |
 | `grounding_failed` | warning | The model named a time or fee no tool returned; the reply was replaced | Review the prompt version if frequent |
 | `emergency_redirected` | warning | An emergency phrase was answered with the emergency number (no model call) | Staff see the alert on the Today screen |
