@@ -29,6 +29,10 @@ log = structlog.get_logger(__name__)
 TRANSIENT_RETRY = types.HttpRetryOptions(
     attempts=2, initial_delay=0.5, max_delay=1.0, jitter=0.25, http_status_codes=[500, 502, 503, 504]
 )
+# A call that passes the per-call timeout is sent once more (D-54). On the free tier identical calls
+# usually take about 1.2 s but some take 15-51 s, and the next call is fast again. The turn budget still
+# caps the whole reply.
+TIMEOUT_RETRIES = 1
 
 
 class LlmUnavailableError(Exception):
@@ -158,15 +162,7 @@ class GeminiLLM:
             temperature=0.2,
             max_output_tokens=1024,
         )
-        try:
-            async with asyncio.timeout(self._timeout_s):
-                response = await self._client.aio.models.generate_content(
-                    model=self._model, contents=to_gemini_contents(transcript), config=config
-                )
-        except (genai_errors.APIError, httpx.HTTPError, TimeoutError, OSError) as exc:
-            status = getattr(exc, "code", None)
-            log.warning("llm_unavailable", provider="gemini", error=type(exc).__name__, status=status)
-            raise LlmUnavailableError(type(exc).__name__) from exc
+        response = await self._generate_within_timeout(to_gemini_contents(transcript), config)
         candidates = response.candidates or []
         content = candidates[0].content if candidates else None
         if content is None or not content.parts:
@@ -178,3 +174,24 @@ class GeminiLLM:
         ]
         text = "".join(part.text for part in content.parts if part.text and not part.thought)
         return LlmTurn(text=text or None, tool_calls=calls, raw=content)
+
+    async def _generate_within_timeout(
+        self, contents: list[types.Content], config: types.GenerateContentConfig
+    ) -> types.GenerateContentResponse:
+        for attempt in range(TIMEOUT_RETRIES + 1):
+            try:
+                async with asyncio.timeout(self._timeout_s):
+                    return await self._client.aio.models.generate_content(
+                        model=self._model, contents=contents, config=config
+                    )
+            except TimeoutError as exc:  # before OSError, which TimeoutError subclasses
+                if attempt < TIMEOUT_RETRIES:
+                    log.warning("llm_timeout_retry", provider="gemini", timeout_s=self._timeout_s)
+                    continue
+                log.warning("llm_unavailable", provider="gemini", error=type(exc).__name__, status=None)
+                raise LlmUnavailableError(type(exc).__name__) from exc
+            except (genai_errors.APIError, httpx.HTTPError, OSError) as exc:
+                status = getattr(exc, "code", None)
+                log.warning("llm_unavailable", provider="gemini", error=type(exc).__name__, status=status)
+                raise LlmUnavailableError(type(exc).__name__) from exc
+        raise AssertionError("unreachable: the last attempt returns or raises")

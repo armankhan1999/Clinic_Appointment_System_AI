@@ -246,8 +246,8 @@ buttons) and 2 hours before (no buttons), each at most once; failed deliveries f
   limiter is in memory.
 - **Concurrency:** the bot processes updates concurrently across users and serially per user; each Python
   process has a database pool of 5 + 5 connections.
-- **Model limits:** at most 5 tool calls and 25 s per reply, 8 s per model call; the free Gemini tier has daily
-  request quotas (operational constraint, not code).
+- **Model limits:** at most 5 tool calls and 25 s per reply, 8 s per model call attempt with one retry after
+  a time-out (D-54); the free Gemini tier has daily request quotas (operational constraint, not code).
 - **Settings propagation:** up to 30 s per process (cache TTL).
 - **Measured reply time:** the final evaluation (`docs/testing/eval-2026-11-05-production-final.md`) recorded a
   p95 of 20.34 s on the free model tier with the database in another region; the 5-second target (NFR-01) is
@@ -771,12 +771,16 @@ Covered in B7.
   `generate(system, transcript, tools) -> LlmTurn`.
 - `GeminiLLM` (google-genai SDK):
   - `GenerateContentConfig(system_instruction, tools=[function declarations], automatic_function_calling
-    disabled, temperature=0.2, max_output_tokens=1024)` (`llm.py:154-160`).
-  - Each call is wrapped in `asyncio.timeout(LLM_TIMEOUT_SECONDS)`.
+    disabled, temperature=0.2, max_output_tokens=1024)` (`llm.py:158-164`).
+  - Each call is wrapped in `asyncio.timeout(LLM_TIMEOUT_SECONDS)`. A call that passes it is cancelled and
+    sent **once more** (`TIMEOUT_RETRIES = 1`, `_generate_within_timeout`, `llm.py:35, 178-197`, D-54), logging
+    `llm_timeout_retry`; a second time-out gives up. Reason: on the free tier identical calls usually take
+    about 1.2 s but some take 15-51 s, and the next call is fast again. The turn budget still caps the reply,
+    and a provider that never answers now produces the fallback after about 16 s (E1-S1-AC3 relaxed by D-54).
   - HTTP retry: `HttpRetryOptions(attempts=2, initial_delay=0.5, max_delay=1.0, jitter=0.25,
     http_status_codes=[500, 502, 503, 504])`, so one quick retry on server errors; 429 is deliberately not
     retried (on the free tier it means the daily quota is used up) (`llm.py:29-31`, D-50).
-  - API errors, `httpx` errors, time-outs and `OSError` become `LlmUnavailableError` and log
+  - API errors, `httpx` errors, a second time-out and `OSError` become `LlmUnavailableError` and log
     `llm_unavailable`; an empty response logs `llm_empty_response`.
   - Gemini 3 attaches "thought signatures" to function-call turns and rejects a follow-up that drops them, so
     model turns are replayed from the provider's raw `Content` (`llm.py:3-5`, `82-91`). Thought parts are
@@ -1436,7 +1440,7 @@ field reads the upper-case variable of the same name) and is cached by `get_sett
 | `TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY` | required secrets | |
 | `AUTH_SECRET` | required, at least 32 characters | HMAC key for unknown-username lockout rows |
 | `GEMINI_MODEL` | required (example: `gemini-3.5-flash-lite`) | |
-| `LLM_TIMEOUT_SECONDS` | 8.0 | per model call |
+| `LLM_TIMEOUT_SECONDS` | 8.0 | per model call attempt; one retry after a time-out (D-54) |
 | `AGENT_TURN_BUDGET_SECONDS` | 25.0 | whole reply; must be ≥ the LLM time-out |
 | `CLINIC_TIMEZONE` | required, must be a valid IANA zone (example `Asia/Kolkata`) | used by the seed for `clinic_settings.timezone`; at run time the zone comes from `clinic_settings` |
 | `LOG_LEVEL` | `INFO` | |
@@ -1570,7 +1574,7 @@ Info: `http_request`, `agent_tool_call`, `bot_starting`, `bot_stopped`, `callbac
 `callback_markup_not_removed`, `patient_data_deleted`, `rate_limited`, `registration_completed`,
 `registration_contact_rejected`, `reminder_run`, `scheduler_heartbeat`, `typing_status_failed`.
 Warning: `agent_budget_exhausted`, `agent_empty_reply`, `agent_tool_limit`, `db_tls_unverified`,
-`emergency_redirected`, `grounding_failed`, `llm_empty_response`, `llm_unavailable`,
+`emergency_redirected`, `grounding_failed`, `llm_empty_response`, `llm_timeout_retry`, `llm_unavailable`,
 `login_failure_purge_failed`, `notification_retry`, `readiness_failed`, `reminder_delivery_failed`,
 `reply_send_retry`.
 Error: `audit_write_failed`, `conversation_failed`, `http_unhandled_error`, `notification_failed`,
@@ -1584,8 +1588,9 @@ Error: `audit_write_failed`, `conversation_failed`, `http_unhandled_error`, `not
 | Alternatives offered on SLOT_TAKEN | 3 | `services/booking.py:32` |
 | Slots shown per availability answer | 5 | `agent/tools.py:211` |
 | Max tool calls per turn | 5 | `agent/loop.py:59` |
-| LLM temperature / max output tokens | 0.2 / 1024 | `agent/llm.py:158-159` |
+| LLM temperature / max output tokens | 0.2 / 1024 | `agent/llm.py:162-163` |
 | LLM retry on 500/502/503/504 | 1 retry, 0.5-1.0 s | `agent/llm.py:29-31` |
+| LLM retry after a per-call time-out | 1 retry (D-54) | `agent/llm.py:35` |
 | Pending action TTL / token | 10 min / 12 chars | `agent/pending.py:15, 45` |
 | Conversation memory | 10 exchanges, 2 h idle | `agent/memory.py` |
 | Registration state idle TTL | 1 h | `conversation/registration.py:14` |

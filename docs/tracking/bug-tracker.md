@@ -4,7 +4,7 @@ Defects found in the built system, from the decision log (`decision-log.md`), th
 
 - **Severity:** High / Medium / Low. M1–M5 and L1–L5 keep the grades of the independent dashboard review (medium, low). Every other severity was assessed for this log on 2026-11-06 from the impact the source describes.
 - **Opened** is the date the defect was recorded (review, run, decision or commit); **Closed** is the date of the fixing commit (or of the run, for ROT-01).
-- Summary: 44 defects; 42 FIXED, 1 ACCEPTED (BUG-30), 1 OPEN (BUG-39, a flaky-test risk).
+- Summary: 45 defects; 43 FIXED (BUG-45 mitigated), 1 ACCEPTED (BUG-30), 1 OPEN (BUG-39, a flaky-test risk).
 
 | ID | Title | Severity | Found in | Steps to reproduce | Expected | Actual | Related AC | Status | Fix / evidence | Opened | Closed |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -52,6 +52,7 @@ Defects found in the built system, from the decision log (`decision-log.md`), th
 | BUG-42 | A reply was lost when the Telegram send timed out | Medium | LIVE-TG-02 | `send_message` raises TimedOut | The reply is sent once more | The patient never received the answer | — | FIXED | 0d83692; D-52; BE-UNIT-06 | 2026-11-05 | 2026-11-05 |
 | BUG-43 | CI type check failed on a test double typed `object` (CI-06) | Low (test only) | CI-06 | Run `uv run mypy` over the tests | Clean | mypy rejected the double; runs on 0d83692, b506ec7 and ec411da were red | — | FIXED | 6297f65; CI-06 green | 2026-11-05 | 2026-11-06 |
 | BUG-44 | Markdown bold markers were shown in replies | Low | LIVE-TG-02 | The model writes "Please tap **Confirm cancel**" | Plain text | The asterisks were shown | — | FIXED | b506ec7; D-53; BE-UNIT-06 | 2026-11-05 | 2026-11-06 |
+| BUG-45 | Slow free-tier Gemini calls turned patient replies into the fallback | Medium | LIVE-TG-03, LAT-PROBE-01 | Ask the bot for a doctor's free slots while a Gemini call takes 15-51 s | The patient gets the slots | "Sorry, I can't answer right now" after the 8 s per-call cap | E1-S1-AC3, E2-S2 | FIXED (mitigated) | One retry after a per-call timeout (D-54); BE-UNIT-07, M6-FULL-06, AEV-PROD-07 (booking 8/8). Residual: a turn can still exceed 25 s during a long slow spell; the real fix is a faster or paid tier (DEC-RT) | 2026-11-10 | 2026-11-10 |
 
 Not in this log: the clinic-hours data conflict (seed FAQ 7 PM, `staff_hours_text` 6 PM) is an owner decision, tracked as HOURS in `PROJECT_TRACKER.md`. Reply time (NFR-01) is a target not met, tracked as DEC-RT.
 
